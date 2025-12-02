@@ -1,0 +1,17 @@
+{
+  "name": "phantom-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Phantom Code Battle Platform - Development",
+  "scripts": {
+    "setup": "./scripts/start-dev.sh",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "stop": "./scripts/stop-dev.sh",
+    "migrate": "cd backend && npm run migrate",
+    "seed": "cd backend && npm run seed"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

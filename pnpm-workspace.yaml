@@ -1,0 +1,11 @@
+packages:
+  - backend
+  - frontend
+
+ignoredBuiltDependencies:
+  - bcrypt
+  - cpu-features
+  - esbuild
+  - msgpackr-extract
+  - protobufjs
+  - ssh2

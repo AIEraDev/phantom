@@ -1,0 +1,37 @@
+# Cleanup Log - Production Code Removal
+
+## Removed Files & Folders
+- .github/ (CI/CD workflows)
+- e2e/ (E2E tests)
+- backend/scripts/ (deployment scripts)
+- frontend/scripts/ (build scripts)
+- scripts/setup-local.sh (replaced with simpler version)
+- playwright-report/ & playwright.config.ts
+- All Dockerfiles (backend/frontend)
+- docker-compose.prod.yml
+- railway.json, railway.toml, render.yaml
+- .env.production.example
+- backend/SECURITY.md
+- backend/docker-compose.test.yml
+- All __tests__ folders
+- frontend/vitest.config.ts
+- backend/.env.test
+
+## Removed Dependencies
+- @playwright/test, playwright
+- vitest (backend & frontend)
+- @testing-library/* packages
+- eslint, eslint-config-next
+- @types/supertest, supertest
+
+## Simplified Scripts
+- Root package.json: 8 scripts (was 24)
+- Backend package.json: 4 scripts (was 17)
+- Frontend package.json: 1 script (was 5)
+
+## Result
+Clean development-only setup with:
+- Simple `npm run dev` to start everything
+- Auto-setup of Docker containers
+- Hot reload with nodemon
+- Minimal dependencies

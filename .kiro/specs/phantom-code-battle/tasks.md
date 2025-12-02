@@ -1,0 +1,455 @@
+# Implementation Plan
+
+## Existing Features (Completed)
+
+- [x] 1-43. Core platform features (authentication, matchmaking, battle arena, spectator mode, replay, leaderboard, UI)
+
+## New Features
+
+- [x] 44. Create database migrations for new features
+
+  - [x] 44.1 Create ghost_recordings table migration
+    - Add columns: id, challenge_id, user_id, username, score, duration_ms, events (JSONB), is_ai, created_at
+    - Add indexes on challenge_id and score for efficient queries
+    - _Requirements: 14.1, 14.2, 14.5_
+  - [x] 44.2 Create skill tree tables migration
+    - Create skill_tree_nodes table with id, challenge_id, tier, position_x, position_y, category
+    - Create skill_tree_edges table with id, from_node_id, to_node_id
+    - Add foreign key constraints and indexes
+    - _Requirements: 16.1, 16.2, 16.3_
+  - [x] 44.3 Create user_progress table migration
+    - Add columns: id, user_id, challenge_id, completed, mastered, best_score, attempts, completed_at
+    - Add unique constraint on (user_id, challenge_id)
+    - Add indexes for efficient progress queries
+    - _Requirements: 16.2, 16.5_
+  - [x] 44.4 Create practice_sessions table migration
+    - Add columns: id, user_id, challenge_id, code, language, score, feedback (JSONB), hints_used, started_at, completed_at
+    - Add indexes on user_id and challenge_id
+    - _Requirements: 17.1, 17.4, 17.5_
+  - [x] 44.5 Create spectator_messages table migration
+    - Add columns: id, match_id, user_id, username, message, message_type, created_at
+    - Add index on match_id for efficient history retrieval
+    - _Requirements: 15.2, 15.5_
+
+- [x] 45. Implement Skill Tree Service
+
+  - [x] 45.1 Create skill tree data model and types
+    - Define SkillTreeNode, SkillTreeEdge, UserProgress interfaces
+    - Create database query functions for skill tree operations
+    - _Requirements: 16.1, 16.2, 16.3_
+  - [x] 45.2 Implement getSkillTree function
+    - Query all nodes and edges from database
+    - Join with user progress to determine unlock/completion status
+    - Return structured skill tree with user state
+    - _Requirements: 16.3, 16.4_
+  - [x] 45.3 Implement isChallengeUnlocked function
+    - Check if all prerequisite challenges are completed
+    - Return unlock status and missing prerequisites
+    - _Requirements: 16.4, 16.6_
+  - [x] 45.4 Implement updateProgress function
+    - Update user_progress table with new score
+    - Check and set mastery flag if score >= 90
+    - Trigger unlock of connected challenges
+    - _Requirements: 16.2, 16.5_
+  - [x] 45.5 Implement getUnlockedChallenges function
+    - Query challenges where user has completed prerequisites
+    - Include tier-1 challenges by default
+    - _Requirements: 16.1, 17.1_
+
+- [x] 46. Seed skill tree data
+
+  - [x] 46.1 Create skill tree seed script
+    - Define tier structure (5 tiers of increasing difficulty)
+    - Map existing challenges to skill tree nodes
+    - Define prerequisite edges between nodes
+    - _Requirements: 16.1, 16.3_
+  - [x] 46.2 Create category assignments
+    - Assign challenges to categories: arrays, strings, trees, graphs, dp
+    - Calculate position_x and position_y for visual layout
+    - _Requirements: 16.3_
+
+- [x] 47. Create Skill Tree API endpoints
+
+  - [x] 47.1 Implement GET /api/skill-tree endpoint
+    - Return full skill tree with user progress
+    - Include node positions and edge connections
+    - _Requirements: 16.3_
+  - [x] 47.2 Implement GET /api/skill-tree/progress endpoint
+    - Return user's progress on all challenges
+    - Include completion status, mastery, and best scores
+    - _Requirements: 16.2, 16.5_
+  - [x] 47.3 Implement GET /api/skill-tree/unlocked endpoint
+    - Return list of unlocked challenges for user
+    - Filter by difficulty and category if requested
+    - _Requirements: 16.1, 17.1_
+  - [x] 47.4 Implement POST /api/skill-tree/check-unlock endpoint
+    - Check if specific challenge is unlocked
+    - Return prerequisites if locked
+    - _Requirements: 16.4, 16.6_
+
+- [x] 48. Implement Ghost Service
+
+  - [x] 48.1 Create ghost recording data model and types
+    - Define GhostRecording interface
+    - Create database query functions for ghost operations
+    - _Requirements: 14.1, 14.2_
+  - [x] 48.2 Implement getGhostsForChallenge function
+    - Query ghost recordings by challenge_id
+    - Sort by score descending
+    - Limit to top 10 ghosts
+    - _Requirements: 14.1_
+  - [x] 48.3 Implement saveGhostFromMatch function
+    - Extract events from match_events table
+    - Calculate duration and score
+    - Save to ghost_recordings table
+    - _Requirements: 14.5_
+  - [x] 48.4 Implement generateAIGhost function
+    - Create ghost from optimal solution with realistic timing
+    - Add simulated typing delays and test runs
+    - Mark as is_ai = true
+    - _Requirements: 14.6_
+  - [x] 48.5 Implement getTopGhost function
+    - Return highest scoring ghost for challenge
+    - Fall back to AI ghost if none exist
+    - _Requirements: 14.1_
+
+- [x] 49. Create Ghost Mode API endpoints
+
+  - [x] 49.1 Implement GET /api/ghosts/challenge/:challengeId endpoint
+    - Return available ghosts for challenge
+    - Include ghost metadata (username, score, duration)
+    - _Requirements: 14.1_
+  - [x] 49.2 Implement GET /api/ghosts/:ghostId endpoint
+    - Return full ghost recording with events
+    - _Requirements: 14.2_
+  - [x] 49.3 Implement POST /api/ghosts/from-match endpoint
+    - Create ghost from completed match
+    - Validate user won the match
+    - _Requirements: 14.5_
+  - [x] 49.4 Implement POST /api/ghosts/race endpoint
+    - Start ghost race session
+    - Return race ID and ghost data
+    - _Requirements: 14.1, 14.2_
+
+- [x] 50. Implement Ghost Mode WebSocket handlers
+
+  - [x] 50.1 Create ghost race state management in Redis
+    - Store active ghost race state
+    - Track player progress and ghost playback position
+    - _Requirements: 14.2, 14.3_
+  - [x] 50.2 Implement start_ghost_race event handler
+    - Load ghost recording
+    - Initialize race state
+    - Start ghost playback timer
+    - _Requirements: 14.1, 14.2_
+  - [x] 50.3 Implement ghost playback logic
+    - Emit ghost_code_update events at recorded timestamps
+    - Emit ghost_test_run events when ghost ran tests
+    - _Requirements: 14.2, 14.3_
+  - [x] 50.4 Implement ghost_race_submit event handler
+    - Stop ghost playback
+    - Calculate player score
+    - Compare with ghost score
+    - Emit ghost_race_result
+    - _Requirements: 14.4_
+
+- [x] 51. Implement Practice Service
+
+  - [x] 51.1 Create practice session data model and types
+    - Define PracticeSession, PracticeHint interfaces
+    - Create database query functions
+    - _Requirements: 17.1, 17.2_
+  - [x] 51.2 Implement startSession function
+    - Create new practice_sessions record
+    - Load challenge data
+    - Return session with challenge info
+    - _Requirements: 17.2_
+  - [x] 51.3 Implement saveProgress function
+    - Update code in practice_sessions
+    - Auto-save every 30 seconds
+    - _Requirements: 17.2_
+  - [x] 51.4 Implement submitSolution function
+    - Execute code against test cases
+    - Generate AI feedback
+    - Update session with score and feedback
+    - Do NOT update user rating
+    - _Requirements: 17.3, 17.4_
+  - [x] 51.5 Implement getHint function
+    - Return hint based on level (1-3)
+    - Level 1: General approach
+    - Level 2: Algorithm hint
+    - Level 3: Partial solution
+    - _Requirements: 17.6_
+  - [x] 51.6 Implement getPracticeHistory function
+    - Query practice_sessions by user_id
+    - Include scores and timestamps
+    - Calculate improvement trends
+    - _Requirements: 17.5_
+
+- [x] 52. Create Practice Mode API endpoints
+
+  - [x] 52.1 Implement GET /api/practice/challenges endpoint
+    - Return unlocked challenges for practice
+    - Filter by difficulty and category
+    - _Requirements: 17.1_
+  - [x] 52.2 Implement POST /api/practice/start endpoint
+    - Create new practice session
+    - Return session ID and challenge data
+    - _Requirements: 17.2_
+  - [x] 52.3 Implement POST /api/practice/:sessionId/save endpoint
+    - Save current code progress
+    - _Requirements: 17.2_
+  - [x] 52.4 Implement POST /api/practice/:sessionId/submit endpoint
+    - Submit solution for evaluation
+    - Return feedback without rating change
+    - _Requirements: 17.3, 17.4_
+  - [x] 52.5 Implement POST /api/practice/:sessionId/hint endpoint
+    - Return hint at requested level
+    - Increment hints_used counter
+    - _Requirements: 17.6_
+  - [x] 52.6 Implement GET /api/practice/history endpoint
+    - Return user's practice history
+    - Include improvement metrics
+    - _Requirements: 17.5_
+
+- [x] 53. Implement Enhanced Chat Service
+
+  - [x] 53.1 Create chat message data model and types
+    - Define SpectatorMessage interface
+    - Create database query functions
+    - _Requirements: 15.2_
+  - [x] 53.2 Implement sendMessage function
+    - Validate message content
+    - Check rate limit
+    - Filter inappropriate content
+    - Save to database and broadcast
+    - _Requirements: 15.1, 15.4, 15.6_
+  - [x] 53.3 Implement checkRateLimit function
+    - Use Redis counter with 2-second TTL
+    - Return true if under limit, false otherwise
+    - _Requirements: 15.4_
+  - [x] 53.4 Implement filterMessage function
+    - Check against blocked word list
+    - Sanitize or reject inappropriate content
+    - _Requirements: 15.6_
+  - [x] 53.5 Implement getChatHistory function
+    - Query spectator_messages by match_id
+    - Order by created_at
+    - _Requirements: 15.5_
+  - [x] 53.6 Implement sendReaction function
+    - Validate emoji
+    - Broadcast to spectators
+    - _Requirements: 15.3_
+
+- [x] 54. Update Spectator WebSocket handlers for enhanced chat
+
+  - [x] 54.1 Update spectator_message event handler
+    - Add rate limiting check
+    - Add content filtering
+    - Save message to database
+    - _Requirements: 15.1, 15.4, 15.6_
+  - [x] 54.2 Implement spectator_reaction event handler
+    - Validate emoji
+    - Broadcast reaction with position
+    - _Requirements: 15.3_
+  - [x] 54.3 Implement chat_rate_limited event emission
+    - Emit when rate limit exceeded
+    - Include retry time
+    - _Requirements: 15.4_
+
+- [x] 55. Implement Visualization Service
+
+  - [x] 55.1 Create visualization data model and types
+    - Define VisualizationData, VisualizationStep interfaces
+    - Define operation types: compare, swap, insert, delete, visit, highlight
+    - _Requirements: 13.1, 13.2, 13.3_
+  - [x] 55.2 Implement parseExecutionTrace function
+    - Parse stdout for visualization markers
+    - Extract operation type, indices, and values
+    - Build step array with timestamps
+    - _Requirements: 13.1, 13.2, 13.3_
+  - [x] 55.3 Implement generateVisualization function
+    - Execute code with visualization instrumentation
+    - Parse trace output
+    - Return VisualizationData
+    - _Requirements: 13.1, 13.2, 13.3_
+  - [x] 55.4 Implement data aggregation for large datasets
+    - Detect when elements > 1000
+    - Group elements into aggregated nodes
+    - Preserve operation semantics
+    - _Requirements: 13.6_
+
+- [x] 56. Create Visualization API endpoint
+
+  - [x] 56.1 Implement POST /api/visualization/generate endpoint
+    - Accept code, language, test case, and data type
+    - Return visualization data
+    - _Requirements: 13.1, 13.2, 13.3_
+
+- [x] 57. Build Skill Tree frontend page
+
+  - [x] 57.1 Create SkillTreePage component
+    - Fetch skill tree data from API
+    - Display loading state
+    - Handle errors
+    - _Requirements: 16.3_
+  - [x] 57.2 Create SkillTreeGraph component
+    - Render nodes using canvas or SVG
+    - Draw edges between connected nodes
+    - Implement zoom and pan controls
+    - _Requirements: 16.3_
+  - [x] 57.3 Create SkillTreeNode component
+    - Display node with appropriate state styling
+    - Locked: gray, lock icon
+    - Unlocked: cyan border
+    - Completed: lime fill, checkmark
+    - Mastered: gold border, star
+    - _Requirements: 16.3, 16.5_
+  - [x] 57.4 Implement node click interaction
+    - Show challenge details modal
+    - Display prerequisites for locked nodes
+    - Navigate to practice or battle
+    - _Requirements: 16.4, 16.6_
+  - [x] 57.5 Add category filter tabs
+    - Filter nodes by category
+    - Highlight selected category
+    - _Requirements: 16.3_
+
+- [x] 58. Build Ghost Mode frontend components
+
+  - [x] 58.1 Create GhostSelectionModal component
+    - Display available ghosts for challenge
+    - Show ghost stats (username, score, duration)
+    - Option to race against AI
+    - _Requirements: 14.1_
+  - [x] 58.2 Create GhostRacePage component
+    - Split view layout (player 60%, ghost 40%)
+    - Ghost editor with semi-transparent styling
+    - Progress comparison widget
+    - _Requirements: 14.2, 14.3_
+  - [x] 58.3 Implement ghost playback display
+    - Show ghost code updates in real-time
+    - Display ghost test results
+    - Show ghost submission indicator
+    - _Requirements: 14.2, 14.3_
+  - [x] 58.4 Create GhostRaceResult component
+    - Display comparison of scores
+    - Show win/lose animation
+    - Option to save as new ghost (if won)
+    - _Requirements: 14.4, 14.5_
+  - [x] 58.5 Integrate ghost WebSocket events
+    - Handle ghost_code_update events
+    - Handle ghost_test_run events
+    - Handle ghost_race_result event
+    - _Requirements: 14.2, 14.3, 14.4_
+
+- [x] 59. Build Practice Mode frontend page
+
+  - [x] 59.1 Create PracticeChallengeBrowser component
+    - Display unlocked challenges
+    - Filter by difficulty and category
+    - Search functionality
+    - _Requirements: 17.1_
+  - [x] 59.2 Create PracticeModePage component
+    - Code editor without timer
+    - No opponent view
+    - Relaxed UI styling
+    - _Requirements: 17.2_
+  - [x] 59.3 Create HintPanel component
+    - Display hint button with level indicator
+    - Show hint content when requested
+    - Progressive reveal (1/3, 2/3, 3/3)
+    - _Requirements: 17.6_
+  - [x] 59.4 Create PracticeFeedbackPanel component
+    - Display AI feedback after submission
+    - Show correctness, efficiency, quality scores
+    - Display improvement suggestions
+    - _Requirements: 17.4_
+  - [x] 59.5 Create PracticeHistoryPage component
+    - Display past practice sessions
+    - Show scores and improvement trends
+    - Link to retry challenges
+    - _Requirements: 17.5_
+  - [x] 59.6 Implement auto-save functionality
+    - Save code every 30 seconds
+    - Show "Saved" indicator
+    - Restore on page reload
+    - _Requirements: 17.2_
+
+- [x] 60. Build Enhanced Spectator Chat frontend
+
+  - [x] 60.1 Update SpectatorChat component
+    - Add emoji picker button
+    - Display rate limit countdown
+    - Show message timestamps
+    - _Requirements: 15.1, 15.2, 15.4_
+  - [x] 60.2 Create EmojiPicker component
+    - Display common emoji grid
+    - Handle emoji selection
+    - _Requirements: 15.3_
+  - [x] 60.3 Create FloatingReaction component
+    - Animate emoji floating up
+    - Fade out after animation
+    - Position over match view
+    - _Requirements: 15.3_
+  - [x] 60.4 Implement chat rate limit UI
+    - Show countdown when rate limited
+    - Disable send button during cooldown
+    - _Requirements: 15.4_
+  - [x] 60.5 Update spectator page to load chat history
+    - Fetch chat history on join
+    - Display previous messages
+    - _Requirements: 15.5_
+
+- [x] 61. Build Algorithm Visualization frontend
+
+  - [x] 61.1 Create AlgorithmVisualizer component
+    - Initialize Three.js scene
+    - Handle WebGL detection with 2D fallback
+    - _Requirements: 13.1, 13.2, 13.3_
+  - [x] 61.2 Create ArrayVisualization component
+    - Render 3D bar chart
+    - Animate comparisons and swaps
+    - Color coding for operations
+    - _Requirements: 13.1_
+  - [x] 61.3 Create TreeVisualization component
+    - Render 3D node-link diagram
+    - Animate traversal paths
+    - Highlight current node
+    - _Requirements: 13.2_
+  - [x] 61.4 Create GraphVisualization component
+    - Render 3D force-directed layout
+    - Animate edge traversals
+    - Highlight visited nodes
+    - _Requirements: 13.3_
+  - [x] 61.5 Create VisualizationControls component
+    - Play/pause button
+    - Speed slider
+    - Step forward/backward
+    - Toggle 2D/3D view
+    - _Requirements: 13.4, 13.5_
+  - [x] 61.6 Integrate visualization into battle arena
+    - Add visualization toggle button
+    - Display visualization panel when enabled
+    - Sync with code execution
+    - _Requirements: 13.5_
+
+- [x] 62. Update navigation and routing
+  - [x] 62.1 Add Skill Tree link to navigation
+    - Add to main nav menu
+    - Add to dashboard quick links
+    - _Requirements: 16.3_
+  - [x] 62.2 Add Practice Mode link to navigation
+    - Add to main nav menu
+    - Add to dashboard quick links
+    - _Requirements: 17.1_
+  - [x] 62.3 Add Ghost Mode option to challenge selection
+    - Show ghost mode button on challenge cards
+    - Integrate with matchmaking flow
+    - _Requirements: 14.1_
+  - [x] 62.4 Create routes for new pages
+    - /skill-tree
+    - /practice
+    - /practice/[challengeId]
+    - /ghost-race/[challengeId]
+    - _Requirements: All new features_

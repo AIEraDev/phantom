@@ -1,0 +1,40 @@
+<!-- Save this exactly as "grid.svg" -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- Fine grid: 20px spacing -->
+    <pattern id="grid20" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#d9d9d9" stroke-width="0.7"/>
+    </pattern>
+
+    <!-- Major grid: 100px spacing (drawn on top) -->
+    <pattern id="grid100" width="100" height="100" patternUnits="userSpaceOnUse">
+      <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#bfbfbf" stroke-width="1.6"/>
+    </pattern>
+
+    <!-- Optional center crosshair -->
+    <g id="centerCross">
+      <line x1="0" y1="-10000" x2="0" y2="10000" stroke="#8c8c8c" stroke-width="1" opacity="0.15"/>
+      <line x1="-10000" y1="0" x2="10000" y2="0" stroke="#8c8c8c" stroke-width="1" opacity="0.15"/>
+    </g>
+  </defs>
+
+  <!-- background -->
+  <rect width="100%" height="100%" fill="#ffffff"/>
+
+  <!-- apply fine grid -->
+  <rect width="100%" height="100%" fill="url(#grid20)"/>
+
+  <!-- apply major grid lines on top -->
+  <rect width="100%" height="100%" fill="url(#grid100)"/>
+
+  <!-- optional center crosshair placed in the middle of the viewBox -->
+  <g transform="translate(600,400)">
+    <use href="#centerCross"/>
+  </g>
+
+  <!-- labels for scale (non-obtrusive) -->
+  <g font-family="sans-serif" font-size="11" fill="#666" opacity="0.9">
+    <text x="10" y="18">Grid: 20px (fine) / 100px (major)</text>
+    <text x="10" y="34">SVG size: 1200×800</text>
+  </g>
+</svg>
