@@ -15,6 +15,7 @@ import skillTreeRoutes from "./routes/skillTree.routes";
 import ghostRoutes from "./routes/ghost.routes";
 import practiceRoutes from "./routes/practice.routes";
 import visualizationRoutes from "./routes/visualization.routes";
+import coachRoutes from "./routes/coach.routes";
 import { matchmakingProcessor } from "./services/matchmaking.processor";
 import { matchCleanupService } from "./services/matchCleanup.service";
 import { setupConnectionHandlers, requireAuth, ClientToServerEvents, ServerToClientEvents } from "./websocket";
@@ -66,6 +67,7 @@ app.use("/api/skill-tree", skillTreeRoutes);
 app.use("/api/ghosts", ghostRoutes);
 app.use("/api/practice", practiceRoutes);
 app.use("/api/visualization", visualizationRoutes);
+app.use("/api/coach", coachRoutes);
 
 // Setup WebSocket authentication middleware (optional - allows auth via handshake)
 io.use(requireAuth);

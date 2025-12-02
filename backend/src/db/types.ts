@@ -318,3 +318,149 @@ export interface VisualizationMarker {
   values?: any[];
   metadata?: Record<string, any>;
 }
+
+// AI Code Coach types
+// Requirements: 7.1, 7.2, 4.1, 4.5, 5.1
+
+/**
+ * Represents a hint requested by a player during a match
+ */
+export interface MatchHint {
+  id: string;
+  match_id: string;
+  user_id: string;
+  hint_level: number; // 1, 2, or 3
+  hint_content: string;
+  requested_at: Date;
+  consumed: boolean; // false if generation failed
+}
+
+/**
+ * Input for creating a new match hint
+ */
+export type NewMatchHint = Omit<MatchHint, "id" | "requested_at">;
+
+/**
+ * Time/Space complexity analysis structure
+ */
+export interface ComplexityAnalysis {
+  detected: string; // e.g., "O(n²)"
+  optimal: string; // e.g., "O(n log n)"
+  explanation: string;
+}
+
+/**
+ * Readability score structure
+ */
+export interface ReadabilityScore {
+  score: number; // 0-10
+  strengths: string[];
+  improvements: string[];
+}
+
+/**
+ * Algorithmic approach analysis structure
+ */
+export interface AlgorithmicApproach {
+  detected: string; // e.g., "Brute Force"
+  suggested: string; // e.g., "Dynamic Programming"
+  explanation: string;
+}
+
+/**
+ * Bug analysis structure
+ */
+export interface BugAnalysis {
+  hasBugs: boolean;
+  bugs: Array<{
+    location: string;
+    description: string;
+    suggestion: string;
+  }>;
+}
+
+/**
+ * Represents a post-match code analysis
+ */
+export interface MatchAnalysis {
+  id: string;
+  match_id: string;
+  user_id: string;
+  time_complexity: ComplexityAnalysis;
+  space_complexity: ComplexityAnalysis;
+  readability_score: ReadabilityScore;
+  algorithmic_approach: AlgorithmicApproach;
+  suggestions: string[]; // 3-5 actionable items
+  bug_analysis: BugAnalysis;
+  hints_used: number;
+  created_at: Date;
+}
+
+/**
+ * Input for creating a new match analysis
+ */
+export type NewMatchAnalysis = Omit<MatchAnalysis, "id" | "created_at">;
+
+/**
+ * Weakness pattern structure
+ */
+export interface WeaknessPattern {
+  category: "time_complexity" | "space_complexity" | "readability" | "patterns";
+  pattern: string; // e.g., "Nested loops when linear solution exists"
+  frequency: number; // How often this appears
+  last_seen: Date;
+}
+
+/**
+ * Category scores structure
+ */
+export interface CategoryScores {
+  time_complexity: number; // 0-100
+  space_complexity: number;
+  readability: number;
+  patterns: number;
+}
+
+/**
+ * Represents a player's weakness profile
+ */
+export interface WeaknessProfile {
+  id: string;
+  user_id: string;
+  patterns: WeaknessPattern[];
+  category_scores: CategoryScores;
+  matches_analyzed: number;
+  last_updated: Date;
+}
+
+/**
+ * Input for creating a new weakness profile
+ */
+export type NewWeaknessProfile = Omit<WeaknessProfile, "id">;
+
+/**
+ * Trend data point structure
+ */
+export interface TrendDataPoint {
+  category: string;
+  data_points: Array<{ match_number: number; score: number }>;
+}
+
+/**
+ * Represents a player's coaching summary
+ */
+export interface CoachingSummary {
+  id: string;
+  user_id: string;
+  total_hints_used: number;
+  total_matches_analyzed: number;
+  improvement_score: number; // 0-100
+  trend_data: TrendDataPoint[];
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Input for creating a new coaching summary
+ */
+export type NewCoachingSummary = Omit<CoachingSummary, "id" | "created_at" | "updated_at">;

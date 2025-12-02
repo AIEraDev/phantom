@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useRef, useState, useCallback, useEffect } from "react";
-import { motion } from "framer-motion";
 import { SkillTreeNode, SkillTreeEdge } from "@/lib/api";
 import { SkillTreeNodeComponent } from "./SkillTreeNode";
 
@@ -13,10 +12,11 @@ interface SkillTreeGraphProps {
   categoryFilter?: string;
 }
 
-const NODE_WIDTH = 128;
-const NODE_HEIGHT = 96;
-const HORIZONTAL_GAP = 60;
-const VERTICAL_GAP = 100;
+const NODE_WIDTH = 160;
+const NODE_HEIGHT = 110;
+const HORIZONTAL_GAP = 24;
+const VERTICAL_GAP = 32;
+const NODES_PER_ROW = 4;
 
 export function SkillTreeGraph({ nodes, edges, onNodeClick, selectedNodeId, categoryFilter }: SkillTreeGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,30 +41,32 @@ export function SkillTreeGraph({ nodes, edges, onNodeClick, selectedNodeId, cate
     nodesByTier.get(tier)!.push(node);
   });
 
-  // Calculate positions for each node using positionX from database
+  // Calculate positions - simple grid layout by tier
   const tiers = Array.from(nodesByTier.keys()).sort((a, b) => a - b);
-  tiers.forEach((tier, tierIndex) => {
-    const tierNodes = nodesByTier.get(tier)!;
+  let currentY = 0;
 
-    // Sort nodes by positionX within each tier
+  tiers.forEach((tier) => {
+    const tierNodes = nodesByTier.get(tier)!;
     tierNodes.sort((a, b) => a.positionX - b.positionX);
 
-    tierNodes.forEach((node) => {
-      // Use positionX from database for horizontal positioning
-      const x = node.positionX * (NODE_WIDTH + HORIZONTAL_GAP);
-      const y = tierIndex * (NODE_HEIGHT + VERTICAL_GAP);
+    tierNodes.forEach((node, index) => {
+      const col = index % NODES_PER_ROW;
+      const row = Math.floor(index / NODES_PER_ROW);
+      const x = col * (NODE_WIDTH + HORIZONTAL_GAP);
+      const y = currentY + row * (NODE_HEIGHT + VERTICAL_GAP);
       nodePositions.set(node.id, { x, y });
     });
+
+    const rowsInTier = Math.ceil(tierNodes.length / NODES_PER_ROW);
+    currentY += rowsInTier * (NODE_HEIGHT + VERTICAL_GAP) + 40; // Extra gap between tiers
   });
 
   // Calculate canvas dimensions
   const allPositions = Array.from(nodePositions.values());
-  const minX = Math.min(...allPositions.map((p) => p.x)) - NODE_WIDTH;
-  const maxX = Math.max(...allPositions.map((p) => p.x)) + NODE_WIDTH * 2;
-  const minY = Math.min(...allPositions.map((p) => p.y)) - NODE_HEIGHT;
-  const maxY = Math.max(...allPositions.map((p) => p.y)) + NODE_HEIGHT * 2;
-  const canvasWidth = maxX - minX;
-  const canvasHeight = maxY - minY;
+  const maxX = allPositions.length > 0 ? Math.max(...allPositions.map((p) => p.x)) + NODE_WIDTH + 40 : 400;
+  const maxY = allPositions.length > 0 ? Math.max(...allPositions.map((p) => p.y)) + NODE_HEIGHT + 40 : 400;
+  const canvasWidth = Math.max(maxX, NODES_PER_ROW * (NODE_WIDTH + HORIZONTAL_GAP));
+  const canvasHeight = maxY;
 
   // Handle zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -113,10 +115,6 @@ export function SkillTreeGraph({ nodes, edges, onNodeClick, selectedNodeId, cate
     }
   }, []);
 
-  // Filter edges to only show those connecting visible nodes
-  const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
-  const filteredEdges = edges.filter((e) => visibleNodeIds.has(e.fromNodeId) && visibleNodeIds.has(e.toNodeId));
-
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden bg-background-primary/50 rounded-lg border border-border-default" onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} style={{ cursor: isDragging ? "grabbing" : "grab" }}>
       {/* Zoom controls */}
@@ -152,53 +150,10 @@ export function SkillTreeGraph({ nodes, edges, onNodeClick, selectedNodeId, cate
           width: canvasWidth,
           height: canvasHeight,
           position: "relative",
+          padding: "20px",
         }}
       >
-        {/* SVG for edges */}
-        <svg
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            width: canvasWidth,
-            height: canvasHeight,
-            left: minX,
-            top: minY,
-          }}
-        >
-          {filteredEdges.map((edge) => {
-            const fromPos = nodePositions.get(edge.fromNodeId);
-            const toPos = nodePositions.get(edge.toNodeId);
-            if (!fromPos || !toPos) return null;
-
-            const fromNode = filteredNodes.find((n) => n.id === edge.fromNodeId);
-            const toNode = filteredNodes.find((n) => n.id === edge.toNodeId);
-
-            // Determine edge color based on completion status
-            let strokeColor = "rgba(100, 100, 120, 0.5)";
-            if (fromNode?.isCompleted && toNode?.isUnlocked) {
-              strokeColor = "rgba(0, 255, 255, 0.6)";
-            } else if (fromNode?.isCompleted) {
-              strokeColor = "rgba(0, 255, 0, 0.4)";
-            }
-
-            const x1 = fromPos.x - minX + NODE_WIDTH / 2;
-            const y1 = fromPos.y - minY + NODE_HEIGHT;
-            const x2 = toPos.x - minX + NODE_WIDTH / 2;
-            const y2 = toPos.y - minY;
-
-            // Create curved path
-            const midY = (y1 + y2) / 2;
-
-            return (
-              <g key={edge.id}>
-                <path d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`} fill="none" stroke={strokeColor} strokeWidth={2} strokeDasharray={fromNode?.isCompleted ? "none" : "5,5"} />
-                {/* Arrow head */}
-                <polygon points={`${x2},${y2} ${x2 - 5},${y2 - 8} ${x2 + 5},${y2 - 8}`} fill={strokeColor} />
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* Nodes */}
+        {/* Nodes - clean grid layout without connecting lines */}
         {filteredNodes.map((node) => {
           const pos = nodePositions.get(node.id);
           if (!pos) return null;
@@ -208,8 +163,9 @@ export function SkillTreeGraph({ nodes, edges, onNodeClick, selectedNodeId, cate
               key={node.id}
               style={{
                 position: "absolute",
-                left: pos.x - minX,
-                top: pos.y - minY,
+                left: pos.x,
+                top: pos.y,
+                width: NODE_WIDTH,
               }}
             >
               <SkillTreeNodeComponent node={node} onClick={onNodeClick} isSelected={selectedNodeId === node.id} />

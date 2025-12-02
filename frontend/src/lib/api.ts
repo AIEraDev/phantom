@@ -379,3 +379,219 @@ export const practiceApi = {
 };
 
 export { ApiError };
+
+// AI Code Coach Types
+export interface HintResponse {
+  id: string;
+  content: string;
+  level: number;
+  levelIndicator: string;
+  consumed: boolean;
+  cooldownRemaining: number;
+}
+
+export interface HintStatus {
+  canRequest: boolean;
+  hintsUsed: number;
+  hintsRemaining: number;
+  cooldownRemaining: number;
+}
+
+export interface MatchAnalysis {
+  id: string;
+  matchId: string;
+  userId: string;
+  timeComplexity: {
+    detected: string;
+    optimal: string;
+    explanation: string;
+  };
+  spaceComplexity: {
+    detected: string;
+    optimal: string;
+    explanation: string;
+  };
+  readabilityScore: {
+    score: number;
+    strengths: string[];
+    improvements: string[];
+  };
+  algorithmicApproach: {
+    detected: string;
+    suggested: string;
+    explanation: string;
+  };
+  suggestions: string[];
+  bugAnalysis: {
+    hasBugs: boolean;
+    bugs: Array<{
+      location: string;
+      description: string;
+      suggestion: string;
+    }>;
+  };
+  hintsUsed: number;
+  createdAt: string;
+}
+
+export interface WeaknessPattern {
+  category: "time_complexity" | "space_complexity" | "readability" | "patterns";
+  pattern: string;
+  frequency: number;
+  lastSeen: string;
+}
+
+export interface WeaknessProfile {
+  id: string;
+  userId: string;
+  patterns: WeaknessPattern[];
+  categoryScores: {
+    time_complexity: number;
+    space_complexity: number;
+    readability: number;
+    patterns: number;
+  };
+  matchesAnalyzed: number;
+  lastUpdated: string;
+}
+
+export interface WeaknessSummary {
+  topWeaknesses: WeaknessPattern[];
+  strongestArea: string;
+  improvementTrend: "improving" | "stable" | "declining";
+}
+
+export interface CoachingSummary {
+  totalHintsUsed: number;
+  totalMatchesAnalyzed: number;
+  improvementScore: number;
+  averageAnalysisScore: number;
+}
+
+export interface SkillTimelineEntry {
+  matchId: string;
+  date: string;
+  scores: {
+    time_complexity: number;
+    space_complexity: number;
+    readability: number;
+    patterns: number;
+  };
+}
+
+export interface SkillTimeline {
+  entries: SkillTimelineEntry[];
+}
+
+export interface CategoryFeedback {
+  category: string;
+  feedbackItems: Array<{
+    matchId: string;
+    date: string;
+    feedback: string;
+  }>;
+}
+
+export interface TrendData {
+  category: string;
+  dataPoints: Array<{
+    matchNumber: number;
+    score: number;
+  }>;
+  trend: "improving" | "stable" | "declining";
+}
+
+// Transform snake_case analysis from backend to camelCase for frontend
+function transformAnalysis(data: any): MatchAnalysis {
+  return {
+    id: data.id,
+    matchId: data.match_id || data.matchId,
+    userId: data.user_id || data.userId,
+    timeComplexity: data.time_complexity || data.timeComplexity || { detected: "Unknown", optimal: "Unknown", explanation: "" },
+    spaceComplexity: data.space_complexity || data.spaceComplexity || { detected: "Unknown", optimal: "Unknown", explanation: "" },
+    readabilityScore: data.readability_score || data.readabilityScore || { score: 0, strengths: [], improvements: [] },
+    algorithmicApproach: data.algorithmic_approach || data.algorithmicApproach || { detected: "Unknown", suggested: "Unknown", explanation: "" },
+    suggestions: data.suggestions || [],
+    bugAnalysis: data.bug_analysis || data.bugAnalysis || { hasBugs: false, bugs: [] },
+    hintsUsed: data.hints_used ?? data.hintsUsed ?? 0,
+    createdAt: data.created_at || data.createdAt || new Date().toISOString(),
+  };
+}
+
+export const coachApi = {
+  // Hint endpoints
+  requestHint: (matchId: string, currentCode: string, language: string): Promise<{ hint: HintResponse }> =>
+    fetchApi("/api/coach/hints/request", {
+      method: "POST",
+      body: JSON.stringify({ matchId, currentCode, language }),
+    }),
+
+  getHintStatus: (matchId: string): Promise<HintStatus> =>
+    fetchApi(`/api/coach/hints/status/${matchId}`, {
+      method: "GET",
+    }),
+
+  getMatchHints: (matchId: string): Promise<{ hints: HintResponse[] }> =>
+    fetchApi(`/api/coach/hints/match/${matchId}`, {
+      method: "GET",
+    }),
+
+  // Analysis endpoints
+  generateAnalysis: (matchId: string): Promise<{ analysis: MatchAnalysis }> =>
+    fetchApi<{ analysis: any }>("/api/coach/analysis/generate", {
+      method: "POST",
+      body: JSON.stringify({ matchId }),
+    }).then((res) => ({ analysis: transformAnalysis(res.analysis) })),
+
+  getAnalysis: (matchId: string): Promise<{ analysis: MatchAnalysis }> =>
+    fetchApi<{ analysis: any }>(`/api/coach/analysis/${matchId}`, {
+      method: "GET",
+    }).then((res) => ({ analysis: transformAnalysis(res.analysis) })),
+
+  getAnalysisHistory: (page = 1, pageSize = 10): Promise<{ analyses: MatchAnalysis[]; total: number; page: number }> =>
+    fetchApi<{ analyses: any[]; total: number; page: number }>(`/api/coach/analysis/history?page=${page}&pageSize=${pageSize}`, {
+      method: "GET",
+    }).then((res) => ({ ...res, analyses: res.analyses.map(transformAnalysis) })),
+
+  // Weakness endpoints
+  getWeaknessProfile: (): Promise<{ profile: WeaknessProfile }> =>
+    fetchApi("/api/coach/weakness/profile", {
+      method: "GET",
+    }),
+
+  getWeaknessSummary: (): Promise<{ summary: WeaknessSummary }> =>
+    fetchApi("/api/coach/weakness/summary", {
+      method: "GET",
+    }),
+
+  getPreMatchTip: (challengeCategory: string): Promise<{ tip: string | null }> =>
+    fetchApi(`/api/coach/weakness/tip/${challengeCategory}`, {
+      method: "GET",
+    }),
+
+  // Dashboard endpoints
+  getDashboardSummary: (): Promise<{ summary: CoachingSummary }> =>
+    fetchApi("/api/coach/dashboard/summary", {
+      method: "GET",
+    }),
+
+  getTimeline: (): Promise<{ timeline: SkillTimeline }> =>
+    fetchApi("/api/coach/dashboard/timeline", {
+      method: "GET",
+    }),
+
+  getCategorizedFeedback: (): Promise<{ feedback: CategoryFeedback[] }> =>
+    fetchApi("/api/coach/dashboard/feedback", {
+      method: "GET",
+    }),
+
+  getMatchDetail: (matchId: string): Promise<{ analysis: MatchAnalysis; hints: HintResponse[] }> =>
+    fetchApi(`/api/coach/dashboard/match/${matchId}`, {
+      method: "GET",
+    }),
+
+  getTrends: (): Promise<{ trends: TrendData[] }> =>
+    fetchApi("/api/coach/dashboard/trends", {
+      method: "GET",
+    }),
+};

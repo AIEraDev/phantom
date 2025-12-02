@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# Deployment script for Railway
+# Deployment script for Railway (Backend only)
+# Frontend is deployed separately (e.g., Vercel)
 # Usage: ./scripts/deploy-railway.sh
 
 set -e
 
-echo "🚀 Deploying Phantom to Railway..."
+echo "🚀 Deploying Phantom Backend to Railway..."
 
 # Check if Railway CLI is installed
 if ! command -v railway &> /dev/null; then
@@ -22,8 +23,8 @@ fi
 echo "✅ Railway CLI found and authenticated"
 
 # Check for required environment variables
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "⚠️  Warning: ANTHROPIC_API_KEY not set"
+if [ -z "$GEMINI_API_KEY" ]; then
+    echo "⚠️  Warning: GEMINI_API_KEY not set"
 fi
 
 # Deploy backend
@@ -31,10 +32,12 @@ echo "📦 Deploying backend..."
 cd backend
 railway up --service backend
 
-# Deploy frontend
-echo "📦 Deploying frontend..."
-cd ../frontend
-railway up --service frontend
-
-echo "✅ Deployment complete!"
+echo "✅ Backend deployment complete!"
 echo "🔗 Check your Railway dashboard for deployment status"
+echo ""
+echo "📝 Remember to set these environment variables in Railway:"
+echo "   - DATABASE_URL (auto-provided by Railway PostgreSQL)"
+echo "   - REDIS_URL (auto-provided by Railway Redis)"
+echo "   - JWT_SECRET"
+echo "   - GEMINI_API_KEY"
+echo "   - FRONTEND_URL (your Vercel/frontend URL)"

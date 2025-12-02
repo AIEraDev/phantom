@@ -5,6 +5,14 @@ async function seedDatabase() {
   try {
     console.log("Starting database seeding...");
 
+    // Create AI Ghost system user (required for ghost race feature)
+    await pool.query(
+      `INSERT INTO users (id, username, email, password_hash, rating, created_at)
+       VALUES ('00000000-0000-0000-0000-000000000000', 'AI Ghost', 'ai@phantom.local', 'not_a_real_password', 2000, NOW())
+       ON CONFLICT (id) DO NOTHING`
+    );
+    console.log("✓ AI Ghost system user created (or already exists)");
+
     // Check if challenges already exist
     const existingChallenges = await pool.query("SELECT COUNT(*) FROM challenges");
     const count = parseInt(existingChallenges.rows[0].count);

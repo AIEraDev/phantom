@@ -5,7 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useWebSocket, useWebSocketConnection } from "@/hooks/useWebSocket";
 import CodeEditor from "@/components/CodeEditor";
 import SpectatorChat, { ChatMessage } from "@/components/SpectatorChat";
-import FloatingReaction, { useFloatingReactions, Reaction } from "@/components/FloatingReaction";
+import FloatingReaction, { useFloatingReactions } from "@/components/FloatingReaction";
+import { TimeFreezeIndicator } from "@/components/TimeFreezeIndicator";
+import { PowerUpType, SpectatorPowerUpEvent, POWERUP_INFO, TIME_FREEZE_DURATION_MS } from "@/types/powerups";
 
 interface Player {
   id: string;
@@ -37,6 +39,22 @@ interface MatchState {
   timeRemaining?: number;
 }
 
+// Power-up activation notification for spectators
+interface PowerUpNotification {
+  id: string;
+  playerId: string;
+  username: string;
+  powerUpType: PowerUpType;
+  timestamp: number;
+}
+
+// Time Freeze state for each player
+interface PlayerTimeFreezeState {
+  playerId: string;
+  username: string;
+  expiresAt: number;
+}
+
 export default function SpectatorViewPage() {
   const params = useParams();
   const router = useRouter();
@@ -50,6 +68,11 @@ export default function SpectatorViewPage() {
   const [rateLimitedUntil, setRateLimitedUntil] = useState<number | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Power-up state for spectators - Requirements 7.1, 7.2, 7.3
+  const [powerUpNotifications, setPowerUpNotifications] = useState<PowerUpNotification[]>([]);
+  const [player1TimeFreeze, setPlayer1TimeFreeze] = useState<PlayerTimeFreezeState | null>(null);
+  const [player2TimeFreeze, setPlayer2TimeFreeze] = useState<PlayerTimeFreezeState | null>(null);
 
   // Floating reactions hook
   const { reactions, addReaction, removeReaction } = useFloatingReactions();
@@ -178,6 +201,44 @@ export default function SpectatorViewPage() {
       router.push(`/results/${matchId}`);
     };
 
+    // Power-up event handler for spectators - Requirements 7.1, 7.2, 7.3
+    const handleSpectatorPowerUpEvent = (data: SpectatorPowerUpEvent) => {
+      // Add notification for power-up activation
+      const notification: PowerUpNotification = {
+        id: `${data.playerId}-${data.timestamp}`,
+        playerId: data.playerId,
+        username: data.username,
+        powerUpType: data.powerUpType,
+        timestamp: data.timestamp,
+      };
+      setPowerUpNotifications((prev) => [...prev, notification]);
+
+      // Auto-remove notification after 5 seconds
+      setTimeout(() => {
+        setPowerUpNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+      }, 5000);
+
+      // Handle Time Freeze indicator - Requirements 7.3
+      if (data.powerUpType === "time_freeze") {
+        const freezeState: PlayerTimeFreezeState = {
+          playerId: data.playerId,
+          username: data.username,
+          expiresAt: data.timestamp + TIME_FREEZE_DURATION_MS,
+        };
+
+        // Determine which player activated Time Freeze
+        setMatchState((prev) => {
+          if (!prev) return prev;
+          if (data.playerId === prev.player1.id) {
+            setPlayer1TimeFreeze(freezeState);
+          } else if (data.playerId === prev.player2.id) {
+            setPlayer2TimeFreeze(freezeState);
+          }
+          return prev;
+        });
+      }
+    };
+
     on("spectator_joined", handleSpectatorJoined);
     on("opponent_code_update", handleOpponentCodeUpdate);
     on("opponent_submitted", handleOpponentSubmitted);
@@ -185,6 +246,7 @@ export default function SpectatorViewPage() {
     on("spectator_reaction", handleSpectatorReaction);
     on("chat_rate_limited", handleChatRateLimited);
     on("match_result", handleMatchResult);
+    on("spectator_powerup_event", handleSpectatorPowerUpEvent);
 
     return () => {
       off("spectator_joined", handleSpectatorJoined);
@@ -194,8 +256,34 @@ export default function SpectatorViewPage() {
       off("spectator_reaction", handleSpectatorReaction);
       off("chat_rate_limited", handleChatRateLimited);
       off("match_result", handleMatchResult);
+      off("spectator_powerup_event", handleSpectatorPowerUpEvent);
     };
   }, [on, off, router, matchId, addReaction]);
+
+  // Auto-clear Time Freeze states when they expire
+  useEffect(() => {
+    if (player1TimeFreeze) {
+      const remaining = player1TimeFreeze.expiresAt - Date.now();
+      if (remaining <= 0) {
+        setPlayer1TimeFreeze(null);
+      } else {
+        const timer = setTimeout(() => setPlayer1TimeFreeze(null), remaining);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [player1TimeFreeze]);
+
+  useEffect(() => {
+    if (player2TimeFreeze) {
+      const remaining = player2TimeFreeze.expiresAt - Date.now();
+      if (remaining <= 0) {
+        setPlayer2TimeFreeze(null);
+      } else {
+        const timer = setTimeout(() => setPlayer2TimeFreeze(null), remaining);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [player2TimeFreeze]);
 
   const handleSendMessage = useCallback(
     (message: string) => {
@@ -244,7 +332,7 @@ export default function SpectatorViewPage() {
         className="fixed inset-0 z-0 pointer-events-none opacity-20"
         style={{
           backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)`,
-          backgroundSize: '4rem 4rem'
+          backgroundSize: "4rem 4rem",
         }}
       />
 
@@ -256,10 +344,7 @@ export default function SpectatorViewPage() {
       {/* Top Bar */}
       <div className="glass-card-strong border-b border-white/10 px-6 py-4 flex items-center justify-between relative z-10">
         <div className="flex items-center gap-6">
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-text-secondary hover:text-white transition-all duration-300 border border-white/5 hover:border-white/20"
-          >
+          <button onClick={() => router.push("/dashboard")} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-text-secondary hover:text-white transition-all duration-300 border border-white/5 hover:border-white/20">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
@@ -273,12 +358,7 @@ export default function SpectatorViewPage() {
 
             <div>
               <h1 className="text-xl font-header font-bold text-white tracking-tight">{matchState.challenge?.title || "Loading..."}</h1>
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${matchState.challenge?.difficulty === 'easy' ? 'bg-accent-lime/10 border-accent-lime/30 text-accent-lime' :
-                  matchState.challenge?.difficulty === 'medium' ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500' :
-                    'bg-accent-red/10 border-accent-red/30 text-accent-red'
-                }`}>
-                {matchState.challenge?.difficulty || "..."}
-              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${matchState.challenge?.difficulty === "easy" ? "bg-accent-lime/10 border-accent-lime/30 text-accent-lime" : matchState.challenge?.difficulty === "medium" ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-500" : "bg-accent-red/10 border-accent-red/30 text-accent-red"}`}>{matchState.challenge?.difficulty || "..."}</span>
             </div>
           </div>
         </div>
@@ -303,13 +383,18 @@ export default function SpectatorViewPage() {
           <div className="bg-white/5 px-4 py-3 border-b border-white/5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-accent-cyan/20 border border-accent-cyan/50 flex items-center justify-center text-accent-cyan font-bold shadow-[0_0_10px_rgba(0,240,255,0.2)]">
-                  {matchState.player1?.username.charAt(0).toUpperCase() || "?"}
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-accent-cyan/20 border border-accent-cyan/50 flex items-center justify-center text-accent-cyan font-bold shadow-[0_0_10px_rgba(0,240,255,0.2)]">{matchState.player1?.username.charAt(0).toUpperCase() || "?"}</div>
                 <div>
                   <p className="text-white font-bold text-sm tracking-wide">{matchState.player1?.username || "Player 1"}</p>
                   <p className="text-accent-cyan text-xs font-code">RATING: {matchState.player1?.rating || "..."}</p>
                 </div>
+                {/* Time Freeze indicator for Player 1 - Requirements 7.3 */}
+                {player1TimeFreeze && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-accent-cyan/10 border border-accent-cyan/30 animate-pulse">
+                    <span className="text-sm">⏸️</span>
+                    <span className="text-accent-cyan text-[10px] font-bold uppercase tracking-wider">Frozen</span>
+                  </div>
+                )}
               </div>
               {matchState.player1Submitted && (
                 <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-accent-lime bg-accent-lime/10 px-2 py-1 rounded border border-accent-lime/20 shadow-[0_0_10px_rgba(57,255,20,0.2)] animate-bounce-subtle">
@@ -328,7 +413,7 @@ export default function SpectatorViewPage() {
 
           {/* Player 1 Editor */}
           <div className="flex-1 overflow-hidden relative">
-            <CodeEditor language={matchState.player1Language as any} initialCode={matchState.player1Code} onChange={() => { }} readOnly={true} showCursor={matchState.player1Cursor} height="100%" />
+            <CodeEditor language={matchState.player1Language as any} initialCode={matchState.player1Code} onChange={() => {}} readOnly={true} showCursor={matchState.player1Cursor} height="100%" />
           </div>
         </div>
 
@@ -340,13 +425,18 @@ export default function SpectatorViewPage() {
             <div className="bg-white/5 px-4 py-3 border-b border-white/5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-accent-magenta/20 border border-accent-magenta/50 flex items-center justify-center text-accent-magenta font-bold shadow-[0_0_10px_rgba(255,0,60,0.2)]">
-                    {matchState.player2?.username.charAt(0).toUpperCase() || "?"}
-                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-accent-magenta/20 border border-accent-magenta/50 flex items-center justify-center text-accent-magenta font-bold shadow-[0_0_10px_rgba(255,0,60,0.2)]">{matchState.player2?.username.charAt(0).toUpperCase() || "?"}</div>
                   <div>
                     <p className="text-white font-bold text-sm tracking-wide">{matchState.player2?.username || "Player 2"}</p>
                     <p className="text-accent-magenta text-xs font-code">RATING: {matchState.player2?.rating || "..."}</p>
                   </div>
+                  {/* Time Freeze indicator for Player 2 - Requirements 7.3 */}
+                  {player2TimeFreeze && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-accent-magenta/10 border border-accent-magenta/30 animate-pulse">
+                      <span className="text-sm">⏸️</span>
+                      <span className="text-accent-magenta text-[10px] font-bold uppercase tracking-wider">Frozen</span>
+                    </div>
+                  )}
                 </div>
                 {matchState.player2Submitted && (
                   <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-accent-lime bg-accent-lime/10 px-2 py-1 rounded border border-accent-lime/20 shadow-[0_0_10px_rgba(57,255,20,0.2)] animate-bounce-subtle">
@@ -365,7 +455,7 @@ export default function SpectatorViewPage() {
 
             {/* Player 2 Editor */}
             <div className="flex-1 overflow-hidden relative">
-              <CodeEditor language={matchState.player2Language as any} initialCode={matchState.player2Code} onChange={() => { }} readOnly={true} showCursor={matchState.player2Cursor} height="100%" />
+              <CodeEditor language={matchState.player2Language as any} initialCode={matchState.player2Code} onChange={() => {}} readOnly={true} showCursor={matchState.player2Cursor} height="100%" />
             </div>
           </div>
 
@@ -376,6 +466,33 @@ export default function SpectatorViewPage() {
           </div>
         </div>
       </div>
+
+      {/* Power-Up Notifications - Requirements 7.1, 7.2 */}
+      {powerUpNotifications.length > 0 && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 flex flex-col gap-2 z-50 pointer-events-none">
+          {powerUpNotifications.map((notification) => (
+            <div key={notification.id} className="px-4 py-3 bg-accent-magenta/10 border border-accent-magenta/50 rounded-xl backdrop-blur-md shadow-lg flex items-center gap-3 animate-fade-in">
+              <span className="text-2xl">{POWERUP_INFO[notification.powerUpType].icon}</span>
+              <div className="flex flex-col">
+                <span className="text-white font-bold text-sm">{notification.username}</span>
+                <span className="text-accent-magenta text-xs uppercase tracking-wider">used {POWERUP_INFO[notification.powerUpType].name}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Time Freeze Indicators for Players - Requirements 7.3 */}
+      {player1TimeFreeze && (
+        <div className="absolute top-24 left-6 z-40">
+          <TimeFreezeIndicator expiresAt={player1TimeFreeze.expiresAt} isOwnFreeze={false} playerName={player1TimeFreeze.username} />
+        </div>
+      )}
+      {player2TimeFreeze && (
+        <div className="absolute top-24 right-6 z-40">
+          <TimeFreezeIndicator expiresAt={player2TimeFreeze.expiresAt} isOwnFreeze={false} playerName={player2TimeFreeze.username} />
+        </div>
+      )}
 
       {/* Connection Status Indicator */}
       {!isConnected && (

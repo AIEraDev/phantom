@@ -8,6 +8,8 @@ import { setupLobbyHandlers } from "./lobbyHandler";
 import { setupBattleArenaHandlers } from "./battleArenaHandler";
 import { setupSpectatorHandlers } from "./spectatorHandler";
 import { setupGhostRaceHandlers } from "./ghostRaceHandler";
+import { setupCoachHandlers } from "./coachHandler";
+import { setupPowerUpHandlers } from "./powerUpHandler";
 
 /**
  * Setup WebSocket connection handlers
@@ -50,6 +52,12 @@ export function setupConnectionHandlers(io: Server<ClientToServerEvents, ServerT
 
       // Setup ghost race event handlers
       setupGhostRaceHandlers(io, socket);
+
+      // Setup AI Code Coach event handlers
+      setupCoachHandlers(io, socket);
+
+      // Setup power-up event handlers
+      setupPowerUpHandlers(io, socket);
     }
 
     // Handle manual authentication (fallback for clients that don't use handshake auth)

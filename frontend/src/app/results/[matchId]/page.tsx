@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import VictoryConfetti from "@/components/VictoryConfetti";
+import { PostMatchAnalysis, MatchAnalysis } from "@/components/PostMatchAnalysis";
+import { coachApi } from "@/lib/api";
 
 interface ScoreBreakdown {
   correctness: number;
@@ -62,6 +64,11 @@ export default function ResultsPage() {
   const [showCodeComparison, setShowCodeComparison] = useState(false);
   const [animateScores, setAnimateScores] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+
+  // AI Analysis state - Requirements 3.1
+  const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
 
   useEffect(() => {
     const fetchMatchResult = async () => {
@@ -145,6 +152,30 @@ export default function ResultsPage() {
 
     fetchMatchResult();
   }, [matchId, user?.id]);
+
+  // Fetch AI analysis - Requirements 3.1
+  useEffect(() => {
+    const fetchAnalysis = async () => {
+      if (!matchId) return;
+
+      setAnalysisLoading(true);
+      try {
+        const response = await coachApi.getAnalysis(matchId);
+        setAnalysis(response.analysis);
+      } catch (err) {
+        // Analysis might not be available yet, that's okay
+        console.log("Analysis not available yet:", err);
+      } finally {
+        setAnalysisLoading(false);
+      }
+    };
+
+    fetchAnalysis();
+  }, [matchId]);
+
+  const handleViewCoachingDashboard = () => {
+    router.push("/coaching");
+  };
 
   const handleRematch = () => {
     // Navigate to matchmaking queue
@@ -362,6 +393,41 @@ export default function ResultsPage() {
             </div>
           </div>
         </div>
+
+        {/* AI Code Coach Analysis Toggle - Requirements 3.1 */}
+        <div className="mb-8">
+          <button onClick={() => setShowAnalysis(!showAnalysis)} className="w-full glass-card p-6 rounded-xl border border-white/10 hover:border-accent-magenta/50 transition-all duration-300 group flex items-center justify-center gap-3">
+            <span className="text-2xl">🤖</span>
+            <span className="text-xl font-bold text-white group-hover:text-accent-magenta transition-colors">{showAnalysis ? "HIDE" : "VIEW"} AI CODE COACH ANALYSIS</span>
+            {analysisLoading && <div className="w-5 h-5 border-2 border-accent-magenta/30 border-t-accent-magenta rounded-full animate-spin" />}
+            <svg className={`w-6 h-6 text-text-secondary group-hover:text-accent-magenta transition-all duration-300 ${showAnalysis ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* AI Code Coach Analysis Section */}
+        {showAnalysis && (
+          <div className="mb-12 animate-fade-in">
+            {analysis ? (
+              <PostMatchAnalysis analysis={analysis} isWinner={isWinner} onViewDashboard={handleViewCoachingDashboard} />
+            ) : analysisLoading ? (
+              <div className="glass-card rounded-2xl p-8 text-center border border-white/10">
+                <div className="w-12 h-12 border-4 border-accent-magenta/20 border-t-accent-magenta rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-text-secondary">Generating AI analysis...</p>
+              </div>
+            ) : (
+              <div className="glass-card rounded-2xl p-8 text-center border border-white/10">
+                <span className="text-4xl mb-4 block">📊</span>
+                <h3 className="text-xl font-bold text-white mb-2">Analysis Not Available</h3>
+                <p className="text-text-secondary mb-4">The AI analysis for this match is not available yet.</p>
+                <button onClick={handleViewCoachingDashboard} className="px-6 py-3 bg-accent-magenta text-white font-bold rounded-lg hover:bg-accent-magenta/90 transition-colors">
+                  View Coaching Dashboard
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Code Comparison Toggle */}
         <div className="mb-12">

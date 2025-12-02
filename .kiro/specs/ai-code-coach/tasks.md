@@ -1,0 +1,287 @@
+# Implementation Plan
+
+- [x] 1. Set up database schema and migrations
+
+  - [x] 1.1 Create match_hints table migration
+    - Add columns: id, match_id, user_id, hint_level, hint_content, requested_at, consumed
+    - Add foreign keys to matches and users tables
+    - Add index on (match_id, user_id) for efficient lookups
+    - _Requirements: 7.1, 7.2_
+  - [x] 1.2 Create match_analyses table migration
+    - Add columns: id, match_id, user_id, time_complexity, space_complexity, readability_score, algorithmic_approach, suggestions, bug_analysis, hints_used, created_at
+    - Add foreign keys to matches and users tables
+    - Add index on user_id for history queries
+    - _Requirements: 7.1, 7.2_
+  - [x] 1.3 Create weakness_profiles table migration
+    - Add columns: id, user_id, patterns, category_scores, matches_analyzed, last_updated
+    - Add unique constraint on user_id
+    - _Requirements: 4.1, 4.5_
+  - [x] 1.4 Create coaching_summaries table migration
+    - Add columns: id, user_id, total_hints_used, total_matches_analyzed, improvement_score, trend_data, created_at, updated_at
+    - Add unique constraint on user_id
+    - _Requirements: 5.1_
+
+- [x] 2. Implement Hint Service core logic
+
+  - [x] 2.1 Create hint service with cooldown and limit checking
+    - Implement canRequestHint() with 60-second cooldown check
+    - Implement hint limit check (max 3 per match)
+    - Store last hint timestamp in Redis for cooldown tracking
+    - _Requirements: 1.3, 1.6_
+  - [x] 2.2 Write property test for hint cooldown enforcement
+    - **Property 1: Hint cooldown enforcement**
+    - **Validates: Requirements 1.3**
+  - [x] 2.3 Write property test for hint limit enforcement
+    - **Property 3: Hint limit enforcement**
+    - **Validates: Requirements 1.6**
+  - [x] 2.4 Implement hint level indicator function
+    - Return "1/3", "2/3", or "3/3" based on hint count
+    - _Requirements: 2.4_
+  - [x] 2.5 Write property test for hint level indicator
+    - **Property 4: Hint level indicator correctness**
+    - **Validates: Requirements 2.4**
+  - [x] 2.6 Implement score penalty calculation
+    - Calculate penalty as baseScore _ (1 - 0.05 _ hintCount)
+    - Cap hintCount at 3
+    - _Requirements: 1.5_
+  - [x] 2.7 Write property test for score penalty calculation
+    - **Property 2: Hint score penalty calculation**
+    - **Validates: Requirements 1.5**
+
+- [x] 3. Implement AI hint generation
+
+  - [x] 3.1 Create Gemini prompt for hint generation
+    - Include challenge description, visible test cases, current code
+    - Vary prompt based on hint level (subtle, moderate, direct)
+    - Ensure prompt instructs AI not to reveal hidden test cases
+    - _Requirements: 6.1, 6.2, 2.1, 2.2, 2.3_
+  - [x] 3.2 Write property test for hint context completeness
+    - **Property 15: Hint context completeness**
+    - **Validates: Requirements 6.1**
+  - [x] 3.3 Implement hint content validation
+    - Check generated hint doesn't contain hidden test case data
+    - Sanitize output before returning
+    - _Requirements: 6.2_
+  - [x] 3.4 Write property test for hidden test case protection
+    - **Property 16: Hidden test case protection**
+    - **Validates: Requirements 6.2**
+  - [x] 3.5 Implement fallback hint system
+    - Create pre-written hints by challenge category
+    - Return fallback when AI unavailable
+    - Do not consume hint allowance on failure
+    - _Requirements: 6.4, 6.5_
+  - [x] 3.6 Write property test for failed hint preserving allowance
+    - **Property 17: Failed hint preserves allowance**
+    - **Validates: Requirements 6.5**
+
+- [x] 4. Checkpoint - Ensure all tests pass
+
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 5. Implement Analysis Service
+
+  - [x] 5.1 Create Gemini prompt for post-match analysis
+    - Request time complexity, space complexity, readability, algorithmic approach
+    - Request 3-5 actionable suggestions
+    - Request bug analysis if tests failed
+    - _Requirements: 3.2, 3.4, 3.5_
+  - [x] 5.2 Implement analysis response parsing and validation
+    - Validate all required fields are present
+    - Ensure suggestions array has 3-5 items
+    - Handle partial responses gracefully
+    - _Requirements: 3.2, 3.4_
+  - [x] 5.3 Write property test for analysis structure completeness
+    - **Property 5: Analysis structure completeness**
+    - **Validates: Requirements 3.2**
+  - [x] 5.4 Write property test for suggestion count bounds
+    - **Property 6: Suggestion count bounds**
+    - **Validates: Requirements 3.4**
+  - [x] 5.5 Implement analysis persistence
+    - Store analysis with all required fields
+    - Link to match and user records
+    - _Requirements: 7.1, 7.2_
+  - [x] 5.6 Write property test for analysis persistence structure
+    - **Property 18: Analysis persistence structure**
+    - **Validates: Requirements 7.2**
+  - [x] 5.7 Implement analysis history with pagination
+    - Support page and pageSize parameters
+    - Return total count for pagination UI
+    - Order by created_at descending
+    - _Requirements: 7.3_
+  - [x] 5.8 Write property test for pagination correctness
+    - **Property 19: Pagination correctness**
+    - **Validates: Requirements 7.3**
+
+- [x] 6. Checkpoint - Ensure all tests pass
+
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 7. Implement Weakness Service
+
+  - [x] 7.1 Create weakness profile management
+    - Create profile on first analysis
+    - Update patterns and category scores after each match
+    - Track matches_analyzed count
+    - _Requirements: 4.1, 4.5_
+  - [x] 7.2 Implement weakness detection threshold check
+    - Return insufficient data indicator for < 5 matches
+    - Enable pattern detection at >= 5 matches
+    - _Requirements: 4.2_
+  - [x] 7.3 Write property test for weakness detection threshold
+    - **Property 7: Weakness detection threshold**
+    - **Validates: Requirements 4.2**
+  - [x] 7.4 Implement weakness summary generation
+    - Select top 3 weakness patterns by frequency
+    - Identify strongest area
+    - Calculate improvement trend
+    - _Requirements: 4.3_
+  - [x] 7.5 Write property test for weakness summary size
+    - **Property 8: Weakness summary size**
+    - **Validates: Requirements 4.3**
+  - [x] 7.6 Implement weakness profile freshness tracking
+    - Update last_updated timestamp on each analysis
+    - _Requirements: 4.5_
+  - [x] 7.7 Write property test for weakness profile freshness
+    - **Property 9: Weakness profile freshness**
+    - **Validates: Requirements 4.5**
+  - [x] 7.8 Implement weakness pattern aggregation
+    - Aggregate patterns across all matches
+    - Track frequency and last seen date
+    - _Requirements: 7.4_
+  - [x] 7.9 Write property test for weakness aggregation consistency
+    - **Property 20: Weakness aggregation consistency**
+    - **Validates: Requirements 7.4**
+
+- [x] 8. Implement Coaching Dashboard Service
+
+  - [x] 8.1 Implement dashboard summary calculation
+    - Calculate total hints used across all matches
+    - Calculate total matches analyzed
+    - Calculate improvement score from trend data
+    - _Requirements: 5.1_
+  - [x] 8.2 Write property test for dashboard summary completeness
+    - **Property 10: Dashboard summary completeness**
+    - **Validates: Requirements 5.1**
+  - [x] 8.3 Implement skill timeline generation
+    - Collect scores from all analyses
+    - Order by date ascending
+    - _Requirements: 5.2_
+  - [x] 8.4 Write property test for timeline chronological ordering
+    - **Property 11: Timeline chronological ordering**
+    - **Validates: Requirements 5.2**
+  - [x] 8.5 Implement categorized feedback retrieval
+    - Group feedback by category (time_complexity, space_complexity, readability, patterns)
+    - Include match reference and date
+    - _Requirements: 5.3_
+  - [x] 8.6 Write property test for feedback categorization completeness
+    - **Property 12: Feedback categorization completeness**
+    - **Validates: Requirements 5.3**
+  - [x] 8.7 Implement match detail retrieval
+    - Return full analysis and hints for a match
+    - _Requirements: 5.4_
+  - [x] 8.8 Write property test for match analysis retrieval completeness
+    - **Property 13: Match analysis retrieval completeness**
+    - **Validates: Requirements 5.4**
+  - [x] 8.9 Implement trend calculation
+    - Calculate trends from last 10 matches
+    - Determine trend direction (improving, stable, declining)
+    - _Requirements: 5.5_
+  - [x] 8.10 Write property test for trend calculation window
+    - **Property 14: Trend calculation window**
+    - **Validates: Requirements 5.5**
+
+- [x] 9. Checkpoint - Ensure all tests pass
+
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 10. Create API routes
+
+  - [x] 10.1 Create hint API routes
+    - POST /api/coach/hints/request - Request a hint
+    - GET /api/coach/hints/status/:matchId - Get hint status
+    - GET /api/coach/hints/match/:matchId - Get hints for match
+    - Add authentication middleware
+    - _Requirements: 1.1, 1.3, 1.4, 1.6_
+  - [x] 10.2 Create analysis API routes
+    - POST /api/coach/analysis/generate - Generate analysis
+    - GET /api/coach/analysis/:matchId - Get analysis
+    - GET /api/coach/analysis/history - Get history with pagination
+    - Add authentication middleware
+    - _Requirements: 3.1, 7.3_
+  - [x] 10.3 Create weakness API routes
+    - GET /api/coach/weakness/profile - Get weakness profile
+    - GET /api/coach/weakness/summary - Get weakness summary
+    - GET /api/coach/weakness/tip/:challengeCategory - Get pre-match tip
+    - Add authentication middleware
+    - _Requirements: 4.2, 4.3, 4.4_
+  - [x] 10.4 Create dashboard API routes
+    - GET /api/coach/dashboard/summary - Get coaching summary
+    - GET /api/coach/dashboard/timeline - Get skill timeline
+    - GET /api/coach/dashboard/feedback - Get categorized feedback
+    - GET /api/coach/dashboard/match/:matchId - Get match detail
+    - GET /api/coach/dashboard/trends - Get improvement trends
+    - Add authentication middleware
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+
+- [x] 11. Implement WebSocket events
+
+  - [x] 11.1 Add hint request WebSocket handler
+    - Handle 'request_hint' event
+    - Emit 'hint_response' or 'hint_error'
+    - Emit 'hint_status_update' after hint consumed
+    - _Requirements: 1.1, 1.4_
+  - [x] 11.2 Add analysis ready WebSocket event
+    - Emit 'analysis_ready' when post-match analysis completes
+    - Emit 'analysis_error' on failure
+    - _Requirements: 3.1_
+
+- [x] 12. Integrate with match flow
+
+  - [x] 12.1 Hook analysis generation into match completion
+    - Trigger analysis generation when match ends
+    - Update weakness profile after analysis
+    - Update coaching summary
+    - _Requirements: 3.1, 4.1, 4.5_
+  - [x] 12.2 Apply hint score penalty to final scores
+    - Retrieve hint count for match
+    - Apply penalty calculation to final score
+    - _Requirements: 1.5_
+
+- [x] 13. Build frontend components
+
+  - [x] 13.1 Create HintOverlay component
+    - Position at top-right of editor
+    - Show hint level indicator
+    - Display cooldown countdown
+    - Show hint content with syntax highlighting
+    - _Requirements: 1.4, 2.4_
+  - [x] 13.2 Create PostMatchAnalysis component
+    - Expandable sections for each category
+    - Visual complexity comparison
+    - Suggestion cards
+    - Bug highlighting
+    - _Requirements: 3.2, 3.4, 3.5, 3.6_
+  - [x] 13.3 Create CoachingDashboard page
+    - Summary cards
+    - Timeline chart
+    - Category filter tabs
+    - Match history list
+    - Trend charts
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+  - [x] 13.4 Create WeaknessSummary component
+    - Top 3 weakness cards
+    - Strongest area highlight
+    - Improvement trend indicator
+    - _Requirements: 4.3_
+  - [x] 13.5 Integrate hint button into battle arena
+    - Add hint request button to editor toolbar
+    - Connect to WebSocket hint events
+    - Show hint overlay on response
+    - _Requirements: 1.1, 1.4_
+  - [x] 13.6 Integrate analysis into match results page
+    - Display analysis after match ends
+    - Link to full coaching dashboard
+    - _Requirements: 3.1_
+
+- [x] 14. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

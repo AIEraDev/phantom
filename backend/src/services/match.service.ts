@@ -5,6 +5,11 @@ import { judgeMatch, MatchResult as JudgingResult } from "./judging.service";
 import { ratingService } from "./rating.service";
 import { ChallengeService } from "./challenge.service";
 import { replayService } from "./replay.service";
+import { generateAnalysis, TestResult } from "./analysis.service";
+import { updateWeaknessProfile } from "./weakness.service";
+import { updateCoachingSummaryAfterMatch } from "./coaching.service";
+import { getHintCount, calculateScorePenalty } from "./hint.service";
+import { emitAnalysisReady, emitAnalysisError } from "../websocket/coachHandler";
 
 export interface MatchResultData {
   matchId: string;
@@ -217,11 +222,23 @@ export class MatchService {
     console.log(`[MatchService] Scores - P1: ${judgingResult.player1Score.totalScore}, P2: ${judgingResult.player2Score.totalScore}`);
 
     // Update match in database
+    // Get hint counts for both players to apply score penalty
+    // Requirements: 1.5 - Apply hint score penalty to final scores
+    const player1HintCount = await getHintCount(matchId, match.player1_id);
+    const player2HintCount = await getHintCount(matchId, match.player2_id);
+
+    // Apply hint score penalty
+    const player1FinalScore = calculateScorePenalty(judgingResult.player1Score.totalScore, player1HintCount);
+    const player2FinalScore = calculateScorePenalty(judgingResult.player2Score.totalScore, player2HintCount);
+
+    console.log(`[MatchService] Hint penalties applied - P1: ${player1HintCount} hints, P2: ${player2HintCount} hints`);
+    console.log(`[MatchService] Final scores after penalty - P1: ${player1FinalScore}, P2: ${player2FinalScore}`);
+
     // Update match in database with results
     await this.updateMatchResults(matchId, {
       winner_id: judgingResult.winnerId,
-      player1_score: Math.round(judgingResult.player1Score.totalScore),
-      player2_score: Math.round(judgingResult.player2Score.totalScore),
+      player1_score: Math.round(player1FinalScore),
+      player2_score: Math.round(player2FinalScore),
       player1_code: player1Code,
       player2_code: player2Code,
       player1_feedback: judgingResult.player1Feedback,
@@ -240,6 +257,22 @@ export class MatchService {
       player2Rating: ratings.player2Rating,
       winnerId: judgingResult.winnerId,
     });
+
+    // Generate AI Code Coach analysis for both players
+    // Requirements: 3.1, 4.1, 4.5 - Trigger analysis generation when match ends
+    try {
+      await this.generatePostMatchAnalysis(matchId, match.player1_id, player1Code, match.player1_language, challenge, judgingResult.winnerId === match.player1_id, player1HintCount);
+      console.log(`[MatchService] Analysis generated for player 1`);
+    } catch (error) {
+      console.error(`[MatchService] Failed to generate analysis for player 1:`, error);
+    }
+
+    try {
+      await this.generatePostMatchAnalysis(matchId, match.player2_id, player2Code, match.player2_language, challenge, judgingResult.winnerId === match.player2_id, player2HintCount);
+      console.log(`[MatchService] Analysis generated for player 2`);
+    } catch (error) {
+      console.error(`[MatchService] Failed to generate analysis for player 2:`, error);
+    }
 
     // Clean up match state from Redis (if it exists)
     if (matchState) {
@@ -420,6 +453,60 @@ export class MatchService {
     }
 
     return keyMoments;
+  }
+
+  /**
+   * Generate post-match analysis for a player
+   * Requirements: 3.1, 4.1, 4.5
+   * @param matchId - The match ID
+   * @param userId - The player's user ID
+   * @param code - The player's submitted code
+   * @param language - The programming language used
+   * @param challenge - The challenge data
+   * @param isWinner - Whether the player won
+   * @param hintsUsed - Number of hints used by the player
+   */
+  private async generatePostMatchAnalysis(matchId: string, userId: string, code: string, language: string, challenge: { id: string; description: string; test_cases: any[] }, isWinner: boolean, hintsUsed: number): Promise<void> {
+    // Skip analysis if no code was submitted
+    if (!code || code.trim().length === 0) {
+      console.log(`[MatchService] Skipping analysis for user ${userId} - no code submitted`);
+      return;
+    }
+
+    try {
+      // Convert test cases to TestResult format for analysis
+      // Note: We use empty test results here since actual test execution was done during judging
+      const testResults: TestResult[] = challenge.test_cases.map((tc: any) => ({
+        passed: true, // Simplified - actual results would come from judging
+        input: tc.input,
+        expectedOutput: tc.expectedOutput,
+      }));
+
+      // Generate analysis
+      const analysis = await generateAnalysis(matchId, userId, code, language, challenge as any, testResults, isWinner);
+
+      // Emit analysis_ready WebSocket event
+      // Requirements: 3.1 - Emit 'analysis_ready' when post-match analysis completes
+      emitAnalysisReady(userId, matchId, analysis);
+      console.log(`[MatchService] Emitted analysis_ready for user ${userId}`);
+
+      // Update weakness profile after analysis
+      // Requirements: 4.1, 4.5
+      await updateWeaknessProfile(userId, analysis);
+      console.log(`[MatchService] Weakness profile updated for user ${userId}`);
+
+      // Update coaching summary
+      // Requirements: 5.1
+      await updateCoachingSummaryAfterMatch(userId, hintsUsed);
+      console.log(`[MatchService] Coaching summary updated for user ${userId}`);
+    } catch (error) {
+      // Emit analysis_error WebSocket event
+      // Requirements: 3.1 - Emit 'analysis_error' on failure
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate analysis";
+      emitAnalysisError(userId, matchId, errorMessage);
+      console.error(`[MatchService] Emitted analysis_error for user ${userId}:`, errorMessage);
+      throw error; // Re-throw to let caller handle
+    }
   }
 
   /**

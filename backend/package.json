@@ -9,7 +9,10 @@
     "seed": "tsx src/db/seed.ts",
     "seed:skilltree": "tsx src/db/seedSkillTree.ts",
     "seed:skilltree:clear": "tsx src/db/seedSkillTree.ts --clear",
-    "db:verify": "tsx src/db/verify.ts"
+    "db:verify": "tsx src/db/verify.ts",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest --run --coverage"
   },
   "keywords": [],
   "author": "",
@@ -40,9 +43,12 @@
     "@types/node": "^20.10.6",
     "@types/pg": "^8.10.9",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^4.0.14",
+    "fast-check": "^4.3.0",
     "nodemon": "^3.1.11",
     "socket.io-client": "^4.8.1",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.14"
   }
 }

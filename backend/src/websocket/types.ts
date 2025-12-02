@@ -1,6 +1,7 @@
 import { Socket } from "socket.io";
 import { JWTPayload } from "../utils/jwt";
 import { StarterCode } from "../db/types";
+import { PowerUpType, PlayerPowerUpState } from "../types/powerups";
 
 // Extend Socket type to include authenticated user data
 export interface AuthenticatedSocket extends Socket {
@@ -42,6 +43,16 @@ export interface CursorPosition {
   c: number; // column (shortened key)
 }
 
+// Hint response structure for WebSocket
+export interface HintResponseData {
+  id: string;
+  content: string;
+  level: number;
+  levelIndicator: string;
+  consumed: boolean;
+  cooldownRemaining: number;
+}
+
 // WebSocket event types with optimized payloads
 export interface ServerToClientEvents {
   // Matchmaking
@@ -68,6 +79,29 @@ export interface ServerToClientEvents {
   spectator_message: (data: { id: string; username: string; message: string; timestamp: number }) => void;
   spectator_reaction: (data: { username: string; emoji: string; position: { x: number; y: number } }) => void;
   chat_rate_limited: (data: { retryAfter: number }) => void;
+
+  // AI Code Coach - Hints (Requirements: 1.1, 1.4)
+  hint_response: (data: { hint: HintResponseData }) => void;
+  hint_error: (data: { error: string; code?: string; cooldownRemaining?: number }) => void;
+  hint_status_update: (data: { hintsUsed: number; hintsRemaining: number }) => void;
+
+  // AI Code Coach - Analysis (Requirements: 3.1)
+  analysis_ready: (data: { matchId: string; analysis: any }) => void;
+  analysis_error: (data: { matchId: string; error: string }) => void;
+
+  // Power-Ups (Requirements: 1.3, 2.4, 3.3, 7.1, 7.2)
+  powerup_activated: (data: {
+    playerId: string;
+    powerUpType: PowerUpType;
+    opponentCode?: string; // For code_peek (only to requester)
+    freezeExpiresAt?: number; // For time_freeze
+    shieldedRuns?: number; // For debug_shield
+  }) => void;
+  powerup_state_update: (data: PlayerPowerUpState) => void;
+  powerup_error: (data: { error: string; code: string; cooldownRemaining?: number }) => void;
+  powerup_effect_expired: (data: { playerId: string; powerUpType: PowerUpType }) => void;
+  opponent_used_powerup: (data: { powerUpType: PowerUpType }) => void;
+  spectator_powerup_event: (data: { playerId: string; username: string; powerUpType: PowerUpType; timestamp: number }) => void;
 
   // Connection
   reconnected: (data: { matchState: any }) => void;
@@ -96,6 +130,12 @@ export interface ClientToServerEvents {
   join_spectate: (data: { matchId: string }) => void;
   spectator_message: (data: { matchId: string; message: string }) => void;
   spectator_reaction: (data: { matchId: string; emoji: string }) => void;
+
+  // AI Code Coach - Hints (Requirements: 1.1)
+  request_hint: (data: { matchId: string; currentCode: string; language: string }) => void;
+
+  // Power-Ups (Requirements: 1.3)
+  activate_powerup: (data: { matchId: string; powerUpType: PowerUpType }) => void;
 }
 
 /**

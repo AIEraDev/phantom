@@ -9,4 +9,6 @@ export { setupMatchmakingHandlers } from "./matchmakingHandler";
 export { setupBattleArenaHandlers } from "./battleArenaHandler";
 export { setupSpectatorHandlers } from "./spectatorHandler";
 export { setupGhostRaceHandlers } from "./ghostRaceHandler";
+export { setupCoachHandlers, emitAnalysisReady, emitAnalysisError } from "./coachHandler";
+export { setupPowerUpHandlers, sendPowerUpStateToPlayer } from "./powerUpHandler";
 export * from "./types";

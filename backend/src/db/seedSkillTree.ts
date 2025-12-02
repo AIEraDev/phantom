@@ -224,26 +224,26 @@ const skillTreeEdges: SkillTreeEdgeSeed[] = [
 
 /**
  * Calculate position_y based on tier
- * Each tier is spaced 150 units apart vertically
+ * Store tier index directly - frontend handles spacing
  */
 function calculatePositionY(tier: number): number {
-  return (tier - 1) * 150;
+  return tier - 1;
 }
 
 /**
  * Calculate position_x based on category and position within category
- * Categories are spaced 200 units apart horizontally
- * Nodes within a category are spaced 100 units apart
+ * Store relative position - frontend handles spacing
+ * Categories are offset by 10 to separate them visually
  */
 function calculatePositionX(category: string, positionX: number): number {
   const categoryOffsets: Record<string, number> = {
     arrays: 0,
-    strings: 500,
-    trees: 1000,
-    graphs: 1500,
-    dp: 2000,
+    strings: 10,
+    trees: 20,
+    graphs: 30,
+    dp: 40,
   };
-  return (categoryOffsets[category] || 0) + positionX * 100;
+  return (categoryOffsets[category] || 0) + positionX;
 }
 
 // ============================================================================

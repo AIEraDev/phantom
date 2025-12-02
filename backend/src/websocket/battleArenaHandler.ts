@@ -4,6 +4,7 @@ import { matchStateService } from "../redis/matchState.service";
 import { sessionManager } from "./sessionManager";
 import { replayService } from "../services/replay.service";
 import { generateVisualization, VisualizationData } from "../services/visualization.service";
+import { powerUpService } from "../services/powerup.service";
 
 // Throttle map to track last code update time per user
 const codeUpdateThrottle = new Map<string, number>();
@@ -269,6 +270,33 @@ export function setupBattleArenaHandlers(io: Server<ClientToServerEvents, Server
         }
       }
 
+      // Check for active Debug Shield and consume a charge (Requirements: 4.2, 4.3)
+      let debugShieldActive = false;
+      let shieldChargesRemaining = 0;
+      const playerPowerUpState = await powerUpService.getPlayerPowerUps(matchId, socket.userId);
+
+      if (playerPowerUpState?.activeEffect?.type === "debug_shield") {
+        debugShieldActive = true;
+        // Consume a shield charge for this test run
+        const shieldStatus = await powerUpService.consumeDebugShieldCharge(matchId, socket.userId);
+        shieldChargesRemaining = shieldStatus.remainingCharges;
+
+        // Mark failed tests as "shielded" when Debug Shield is active
+        for (const result of results) {
+          if (!result.passed) {
+            result.shielded = true;
+          }
+        }
+
+        console.log(`Debug Shield active for player ${socket.userId} in match ${matchId}. Charges remaining: ${shieldChargesRemaining}`);
+
+        // Send updated power-up state to player
+        const updatedPowerUpState = await powerUpService.getPlayerPowerUps(matchId, socket.userId);
+        if (updatedPowerUpState) {
+          socket.emit("powerup_state_update", updatedPowerUpState);
+        }
+      }
+
       // Generate visualization data from the first test case
       let visualization: VisualizationData | null = null;
       if (results.length > 0 && results[0].actualOutput !== null) {
@@ -287,6 +315,8 @@ export function setupBattleArenaHandlers(io: Server<ClientToServerEvents, Server
         stdout: results[0]?.actualOutput ? JSON.stringify(results[0].actualOutput) : "",
         stderr: results.find((r) => r.stderr)?.stderr || "",
         visualization,
+        debugShieldActive,
+        shieldChargesRemaining,
       });
 
       // Record test run event for replay

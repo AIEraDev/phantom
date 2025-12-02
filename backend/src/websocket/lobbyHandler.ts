@@ -2,6 +2,7 @@ import { Server } from "socket.io";
 import { AuthenticatedSocket, ClientToServerEvents, ServerToClientEvents } from "./types";
 import { matchStateService } from "../redis/matchState.service";
 import pool from "../db/connection";
+import { powerUpService } from "../services/powerup.service";
 
 /**
  * Setup lobby event handlers
@@ -38,6 +39,13 @@ export function setupLobbyHandlers(io: Server<ClientToServerEvents, ServerToClie
             timeLimit,
             remaining, // Server-calculated remaining time
           });
+
+          // Send current power-up state to reconnecting player (Requirements: 1.3, 8.1)
+          const playerPowerUpState = await powerUpService.getPlayerPowerUps(matchId, socket.userId);
+          if (playerPowerUpState) {
+            socket.emit("powerup_state_update", playerPowerUpState);
+            console.log(`Sent power-up state to reconnecting player ${socket.userId} for match ${matchId}`);
+          }
           return;
         }
       }
@@ -139,6 +147,13 @@ export function setupLobbyHandlers(io: Server<ClientToServerEvents, ServerToClie
           timeLimit,
           remaining, // Server-calculated remaining time
         });
+
+        // Send current power-up state to reconnecting player (Requirements: 1.3, 8.1)
+        const playerPowerUpState = await powerUpService.getPlayerPowerUps(matchId, socket.userId);
+        if (playerPowerUpState) {
+          socket.emit("powerup_state_update", playerPowerUpState);
+          console.log(`Sent power-up state to reconnecting player ${socket.userId} for match ${matchId}`);
+        }
         return;
       }
 
@@ -256,6 +271,7 @@ const activeTimerSyncs = new Map<string, NodeJS.Timeout>();
 /**
  * Start periodic timer sync for a match
  * Broadcasts remaining time every 5 seconds to keep both players synchronized
+ * Accounts for Time Freeze effects (Requirements: 2.1, 2.2, 2.3)
  */
 function startTimerSync(io: Server<ClientToServerEvents, ServerToClientEvents>, matchId: string, startTime: number, timeLimit: number, player1Id: string, player2Id: string): void {
   // Clear any existing sync for this match
@@ -266,10 +282,10 @@ function startTimerSync(io: Server<ClientToServerEvents, ServerToClientEvents>, 
 
   const syncInterval = setInterval(async () => {
     const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    const remaining = Math.max(0, timeLimit - elapsed);
+    const baseRemaining = Math.max(0, timeLimit - elapsed);
 
     // Stop syncing if match is over
-    if (remaining <= 0) {
+    if (baseRemaining <= 0) {
       clearInterval(syncInterval);
       activeTimerSyncs.delete(matchId);
       return;
@@ -280,12 +296,22 @@ function startTimerSync(io: Server<ClientToServerEvents, ServerToClientEvents>, 
     const player1Session = sessionManager.getSessionByUserId(player1Id);
     const player2Session = sessionManager.getSessionByUserId(player2Id);
 
-    // Emit timer_sync to both players
+    // Calculate effective time remaining for each player (accounts for Time Freeze)
+    // Convert baseRemaining from seconds to milliseconds for the calculation
+    const baseRemainingMs = baseRemaining * 1000;
+    const player1EffectiveRemainingMs = await powerUpService.calculateEffectiveTimeRemaining(matchId, player1Id, baseRemainingMs);
+    const player2EffectiveRemainingMs = await powerUpService.calculateEffectiveTimeRemaining(matchId, player2Id, baseRemainingMs);
+
+    // Emit timer_sync to both players with their effective remaining time (in seconds)
     if (player1Session) {
-      io.to(player1Session.socketId).emit("timer_sync", { remaining });
+      io.to(player1Session.socketId).emit("timer_sync", {
+        remaining: Math.floor(player1EffectiveRemainingMs / 1000),
+      });
     }
     if (player2Session) {
-      io.to(player2Session.socketId).emit("timer_sync", { remaining });
+      io.to(player2Session.socketId).emit("timer_sync", {
+        remaining: Math.floor(player2EffectiveRemainingMs / 1000),
+      });
     }
   }, 5000); // Sync every 5 seconds
 
@@ -375,6 +401,10 @@ async function startMatchCountdown(io: Server<ClientToServerEvents, ServerToClie
       await matchStateService.updateMatchStatus(matchId, "active");
       await matchStateService.updateMatchField(matchId, "startedAt", startTime);
 
+      // Initialize power-ups for both players (Requirements: 1.1, 1.2)
+      await powerUpService.initializePowerUps(matchId, matchState.player1Id, matchState.player2Id);
+      console.log(`Power-ups initialized for match ${matchId}`);
+
       // Get challenge details for time limit
       const challengeResult = await pool.query("SELECT time_limit FROM challenges WHERE id = $1", [matchState.challengeId]);
 
@@ -394,6 +424,18 @@ async function startMatchCountdown(io: Server<ClientToServerEvents, ServerToClie
       });
 
       console.log(`Match ${matchId} started - emitted to both players`);
+
+      // Send power-up state to both players (Requirements: 1.3)
+      const player1PowerUpState = await powerUpService.getPlayerPowerUps(matchId, matchState.player1Id);
+      const player2PowerUpState = await powerUpService.getPlayerPowerUps(matchId, matchState.player2Id);
+
+      if (player1Session && player1PowerUpState) {
+        io.to(player1Session.socketId).emit("powerup_state_update", player1PowerUpState);
+      }
+      if (player2Session && player2PowerUpState) {
+        io.to(player2Session.socketId).emit("powerup_state_update", player2PowerUpState);
+      }
+      console.log(`Power-up state sent to both players for match ${matchId}`);
 
       // Start periodic timer sync to keep both players synchronized
       startTimerSync(io, matchId, startTime, timeLimit, matchState.player1Id, matchState.player2Id);

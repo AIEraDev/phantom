@@ -4,3 +4,4 @@ export * from "./matchmaking.service";
 export * from "./leaderboard.service";
 export * from "./rateLimit.service";
 export * from "./ghostRace.service";
+export * from "./powerUpState.service";

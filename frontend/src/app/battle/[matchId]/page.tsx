@@ -6,11 +6,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useParams } from "next/navigation";
 import { useWebSocket, useWebSocketConnection } from "@/hooks/useWebSocket";
 import { useScreenShake } from "@/hooks/useScreenShake";
+import { usePowerUps } from "@/hooks/usePowerUps";
 import CodeEditor from "@/components/CodeEditor";
 import TestCasePanel, { TestCase, TestResult } from "@/components/TestCasePanel";
 import ConsoleOutput from "@/components/ConsoleOutput";
 import AlgorithmVisualizer from "@/components/AlgorithmVisualizer";
 import { VisualizationData } from "@/types/visualization";
+import HintOverlay, { HintResponse, HintStatus } from "@/components/HintOverlay";
+import { PowerUpPanel } from "@/components/PowerUpPanel";
+import { CodePeekOverlay } from "@/components/CodePeekOverlay";
+import { DebugShieldIndicator } from "@/components/DebugShieldIndicator";
+import { TimeFreezeIndicator } from "@/components/TimeFreezeIndicator";
+import { StatusModal } from "@/components/StatusModal";
+import { coachApi } from "@/lib/api";
 
 interface Challenge {
   id: string;
@@ -59,6 +67,25 @@ export default function BattleArenaPage() {
 
   // Description modal state
   const [showDescription, setShowDescription] = useState(false);
+
+  // Status modal state (for mobile power-ups/effects)
+  const [showStatusModal, setShowStatusModal] = useState(false);
+
+  // Hint system state - Requirements 1.1, 1.4
+  const [showHintOverlay, setShowHintOverlay] = useState(false);
+  const [hintStatus, setHintStatus] = useState<HintStatus>({
+    canRequest: true,
+    hintsUsed: 0,
+    hintsRemaining: 3,
+    cooldownRemaining: 0,
+  });
+  const [hints, setHints] = useState<HintResponse[]>([]);
+  const [currentHint, setCurrentHint] = useState<HintResponse | null>(null);
+  const [isLoadingHint, setIsLoadingHint] = useState(false);
+  const [hintError, setHintError] = useState<string | null>(null);
+
+  // Power-ups system state - Requirements 1.3, 5.1, 5.4
+  const { inventory: powerUpInventory, cooldownUntil: powerUpCooldownUntil, activeEffect: powerUpActiveEffect, opponentActiveEffect: opponentPowerUpEffect, codePeekState, dismissCodePeek, debugShieldCharges, isDebugShieldActive, timeFreezeExpiresAt, opponentTimeFreezeExpiresAt, activatePowerUp, error: powerUpError } = usePowerUps(matchId, user?.id || "");
 
   // Throttle timer for code updates
   const throttleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -430,6 +457,98 @@ export default function BattleArenaPage() {
     setConsoleOutput({ stdout: "", stderr: "" });
   };
 
+  // Hint handlers - Requirements 1.1, 1.4
+  const handleRequestHint = useCallback(async () => {
+    if (isLoadingHint || !hintStatus.canRequest || hintStatus.hintsRemaining === 0) {
+      return;
+    }
+
+    setIsLoadingHint(true);
+    setHintError(null);
+
+    // Use WebSocket for real-time hint request
+    emit("request_hint", {
+      matchId,
+      currentCode: playerCode,
+      language,
+    });
+  }, [isLoadingHint, hintStatus, matchId, playerCode, language, emit]);
+
+  const handleToggleHintOverlay = useCallback(() => {
+    setShowHintOverlay((prev) => !prev);
+  }, []);
+
+  const handleCloseHintOverlay = useCallback(() => {
+    setShowHintOverlay(false);
+  }, []);
+
+  // Fetch initial hint status
+  useEffect(() => {
+    const fetchHintStatus = async () => {
+      try {
+        const status = await coachApi.getHintStatus(matchId);
+        setHintStatus(status);
+
+        // Also fetch existing hints for this match
+        const hintsResponse = await coachApi.getMatchHints(matchId);
+        setHints(hintsResponse.hints);
+      } catch (err) {
+        console.error("Failed to fetch hint status:", err);
+      }
+    };
+
+    if (matchId) {
+      fetchHintStatus();
+    }
+  }, [matchId]);
+
+  // Listen for hint WebSocket events
+  useEffect(() => {
+    const handleHintResponse = (data: { hint: HintResponse }) => {
+      setCurrentHint(data.hint);
+      setHints((prev) => [...prev, data.hint]);
+      setHintStatus((prev) => ({
+        ...prev,
+        hintsUsed: prev.hintsUsed + 1,
+        hintsRemaining: prev.hintsRemaining - 1,
+        cooldownRemaining: data.hint.cooldownRemaining,
+        canRequest: data.hint.cooldownRemaining === 0 && prev.hintsRemaining > 1,
+      }));
+      setIsLoadingHint(false);
+      setShowHintOverlay(true);
+    };
+
+    const handleHintError = (data: { error: string; cooldownRemaining?: number }) => {
+      setHintError(data.error);
+      if (data.cooldownRemaining !== undefined) {
+        setHintStatus((prev) => ({
+          ...prev,
+          cooldownRemaining: data.cooldownRemaining!,
+          canRequest: false,
+        }));
+      }
+      setIsLoadingHint(false);
+    };
+
+    const handleHintStatusUpdate = (data: { hintsUsed: number; hintsRemaining: number }) => {
+      setHintStatus((prev) => ({
+        ...prev,
+        hintsUsed: data.hintsUsed,
+        hintsRemaining: data.hintsRemaining,
+      }));
+    };
+
+    on("hint_response", handleHintResponse);
+    on("hint_error", handleHintError);
+    on("hint_status_update", handleHintStatusUpdate);
+
+    return () => {
+      off("hint_response", handleHintResponse);
+      off("hint_error", handleHintError);
+      off("hint_status_update", handleHintStatusUpdate);
+    };
+  }, [on, off]);
+
   // Visualization handlers
   const handleToggleVisualization = useCallback(() => {
     setShowVisualization((prev) => !prev);
@@ -470,7 +589,7 @@ export default function BattleArenaPage() {
             className="fixed inset-0 z-0 pointer-events-none opacity-20"
             style={{
               backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)`,
-              backgroundSize: '4rem 4rem'
+              backgroundSize: "4rem 4rem",
             }}
           />
           <div className="flex flex-col items-center gap-4 relative z-10">
@@ -490,7 +609,7 @@ export default function BattleArenaPage() {
           className="fixed inset-0 z-0 pointer-events-none opacity-10"
           style={{
             backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)`,
-            backgroundSize: '4rem 4rem'
+            backgroundSize: "4rem 4rem",
           }}
         />
 
@@ -501,14 +620,8 @@ export default function BattleArenaPage() {
               <div className="w-2 h-2 rounded-full bg-accent-cyan animate-pulse" />
               <h1 className="text-lg font-bold text-white tracking-tight">{challenge.title}</h1>
             </div>
-            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${getTimerColor().replace('text-', 'border-').replace('500', '500/30')} ${getTimerColor()}`}>
-              {challenge.difficulty}
-            </span>
-            <button
-              onClick={() => setShowDescription(!showDescription)}
-              className="p-1.5 rounded-md hover:bg-white/5 text-text-secondary hover:text-white transition-colors"
-              title="View Mission Briefing"
-            >
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${getTimerColor().replace("text-", "border-").replace("500", "500/30")} ${getTimerColor()}`}>{challenge.difficulty}</span>
+            <button onClick={() => setShowDescription(!showDescription)} className="p-1.5 rounded-md hover:bg-white/5 text-text-secondary hover:text-white transition-colors" title="View Mission Briefing">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -516,23 +629,63 @@ export default function BattleArenaPage() {
           </div>
 
           <div className="flex items-center gap-6">
-            {/* Timer */}
-            <div className={`flex items-center gap-2 font-code font-bold text-xl ${getTimerColor()} tabular-nums`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {formatTime(timeRemaining)}
+            {/* Timer with Time Freeze indicator */}
+            <div className="flex items-center gap-3">
+              <div className={`flex items-center gap-2 font-code font-bold text-xl ${getTimerColor()} tabular-nums`}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {formatTime(timeRemaining)}
+              </div>
+              {/* Time Freeze indicator - own freeze */}
+              {timeFreezeExpiresAt && (
+                <div className="hidden md:block">
+                  <TimeFreezeIndicator expiresAt={timeFreezeExpiresAt} isOwnFreeze={true} />
+                </div>
+              )}
+              {/* Time Freeze indicator - opponent freeze */}
+              {opponentTimeFreezeExpiresAt && (
+                <div className="hidden md:block">
+                  <TimeFreezeIndicator expiresAt={opponentTimeFreezeExpiresAt} isOwnFreeze={false} playerName="Opponent" />
+                </div>
+              )}
             </div>
+
+            {/* Power-Ups Panel - Requirements 5.1 */}
+            <div className="hidden md:block">
+              <PowerUpPanel inventory={powerUpInventory} cooldownUntil={powerUpCooldownUntil} disabled={isSubmitted} onActivate={activatePowerUp} />
+            </div>
+
+            {/* Debug Shield indicator */}
+            {isDebugShieldActive && (
+              <div className="hidden lg:block">
+                <DebugShieldIndicator remainingCharges={debugShieldCharges} />
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex items-center gap-3">
+              {/* Hint Button - Requirements 1.1, 1.4 */}
+              <button
+                onClick={handleToggleHintOverlay}
+                disabled={isSubmitted}
+                className={`
+                  hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold uppercase tracking-wider transition-all duration-300
+                  ${showHintOverlay ? "bg-accent-yellow/20 text-accent-yellow border border-accent-yellow/50 shadow-[0_0_15px_rgba(252,238,10,0.2)]" : "bg-white/5 text-text-secondary hover:bg-white/10 border border-white/10"}
+                  ${isSubmitted ? "opacity-50 cursor-not-allowed" : ""}
+                `}
+                title={`AI Coach (${hintStatus.hintsUsed}/3 hints used)`}
+              >
+                <span className="text-base">💡</span>
+                <span className="hidden lg:inline">Hint</span>
+                <span className="text-xs opacity-70">{hintStatus.hintsUsed}/3</span>
+              </button>
+
               <button
                 onClick={handleToggleVisualization}
                 className={`
                   hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold uppercase tracking-wider transition-all duration-300
-                  ${showVisualization
-                    ? "bg-accent-magenta/20 text-accent-magenta border border-accent-magenta/50 shadow-[0_0_15px_rgba(255,0,255,0.2)]"
-                    : "bg-white/5 text-text-secondary hover:bg-white/10 border border-white/10"}
+                  ${showVisualization ? "bg-accent-magenta/20 text-accent-magenta border border-accent-magenta/50 shadow-[0_0_15px_rgba(255,0,255,0.2)]" : "bg-white/5 text-text-secondary hover:bg-white/10 border border-white/10"}
                 `}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -546,9 +699,7 @@ export default function BattleArenaPage() {
                 disabled={isSubmitted || !isConnected}
                 className={`
                   px-6 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition-all duration-300
-                  ${isSubmitted
-                    ? "bg-accent-lime/20 text-accent-lime border border-accent-lime/50 cursor-not-allowed"
-                    : "bg-accent-cyan text-background-primary hover:bg-accent-cyan/90 shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)]"}
+                  ${isSubmitted ? "bg-accent-lime/20 text-accent-lime border border-accent-lime/50 cursor-not-allowed" : "bg-accent-cyan text-background-primary hover:bg-accent-cyan/90 shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)]"}
                   disabled:opacity-50
                 `}
               >
@@ -583,6 +734,9 @@ export default function BattleArenaPage() {
               </div>
               <div className="flex-1 overflow-hidden relative">
                 <CodeEditor language={language} initialCode={playerCode} onChange={handleCodeChange} readOnly={isSubmitted} height="100%" enableParticles={!isSubmitted} particleColor="#00ffff" />
+
+                {/* Hint Overlay - Requirements 1.4 */}
+                {showHintOverlay && !isSubmitted && <HintOverlay matchId={matchId} hintStatus={hintStatus} currentHint={currentHint} hints={hints} onRequestHint={handleRequestHint} onClose={handleCloseHintOverlay} isLoading={isLoadingHint} error={hintError} />}
               </div>
             </div>
 
@@ -634,7 +788,7 @@ export default function BattleArenaPage() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden opacity-80 hover:opacity-100 transition-opacity">
-                <CodeEditor language={language} initialCode={opponentCode} onChange={() => { }} readOnly={true} showCursor={opponentCursor} height="100%" />
+                <CodeEditor language={language} initialCode={opponentCode} onChange={() => {}} readOnly={true} showCursor={opponentCursor} height="100%" />
               </div>
               {/* Overlay to discourage cheating/copying */}
               <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent to-background-primary/20" />
@@ -642,15 +796,25 @@ export default function BattleArenaPage() {
 
             {/* Test Cases Panel */}
             <div className="h-[50%] bg-black/20">
-              <TestCasePanel testCases={challenge.testCases || []} results={testResults} onRunTests={handleRunTests} isRunning={isRunningTests} executionTime={executionTime} memoryUsage={memoryUsage} />
+              <TestCasePanel testCases={challenge.testCases || []} results={testResults} onRunTests={handleRunTests} isRunning={isRunningTests} executionTime={executionTime} memoryUsage={memoryUsage} isDebugShieldActive={isDebugShieldActive} />
             </div>
           </div>
         </div>
 
         {/* Mobile Test Cases Panel - Fixed at bottom */}
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 max-h-[40vh] overflow-hidden bg-background-secondary border-t border-white/10 shadow-2xl">
-          <TestCasePanel testCases={challenge.testCases || []} results={testResults} onRunTests={handleRunTests} isRunning={isRunningTests} executionTime={executionTime} memoryUsage={memoryUsage} />
+          <TestCasePanel testCases={challenge.testCases || []} results={testResults} onRunTests={handleRunTests} isRunning={isRunningTests} executionTime={executionTime} memoryUsage={memoryUsage} isDebugShieldActive={isDebugShieldActive} />
         </div>
+
+        {/* Mobile Power-Up Floating Button */}
+        <button onClick={() => setShowStatusModal(true)} className="md:hidden fixed bottom-[42vh] right-4 z-50 w-14 h-14 rounded-full bg-background-secondary border border-white/20 shadow-lg flex items-center justify-center transition-all active:scale-95">
+          <span className="text-2xl">⚡</span>
+          {/* Active indicator dot */}
+          {(timeFreezeExpiresAt || opponentTimeFreezeExpiresAt || isDebugShieldActive) && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent-cyan animate-pulse border-2 border-background-secondary" />}
+        </button>
+
+        {/* Status Modal for Mobile */}
+        <StatusModal isOpen={showStatusModal} onClose={() => setShowStatusModal(false)} timeFreezeExpiresAt={timeFreezeExpiresAt} opponentTimeFreezeExpiresAt={opponentTimeFreezeExpiresAt} isDebugShieldActive={isDebugShieldActive} debugShieldCharges={debugShieldCharges} powerUpInventory={powerUpInventory} powerUpCooldownUntil={powerUpCooldownUntil} onActivatePowerUp={activatePowerUp} disabled={isSubmitted} />
 
         {/* Connection Status Indicator */}
         {!isConnected && (
@@ -674,15 +838,23 @@ export default function BattleArenaPage() {
               <div className="p-8 overflow-y-auto max-h-[60vh]">
                 <div className="flex items-center gap-4 mb-6">
                   <h3 className="text-xl font-bold text-accent-cyan">{challenge.title}</h3>
-                  <span className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border ${getTimerColor().replace('text-', 'border-').replace('500', '500/30')} ${getTimerColor()}`}>
-                    {challenge.difficulty}
-                  </span>
+                  <span className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border ${getTimerColor().replace("text-", "border-").replace("500", "500/30")} ${getTimerColor()}`}>{challenge.difficulty}</span>
                 </div>
                 <div className="prose prose-invert max-w-none">
                   <p className="text-text-secondary whitespace-pre-wrap leading-relaxed text-base">{challenge.description}</p>
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Code Peek Overlay - Requirements 3.2, 3.4 */}
+        {codePeekState.isActive && <CodePeekOverlay code={codePeekState.code} opponentName="Opponent" onDismiss={dismissCodePeek} />}
+
+        {/* Power-up Error Toast */}
+        {powerUpError && (
+          <div className="fixed bottom-4 right-4 z-50 px-4 py-3 bg-accent-red/20 border border-accent-red rounded-lg animate-fade-in">
+            <p className="text-accent-red text-sm font-bold">{powerUpError}</p>
           </div>
         )}
       </main>
