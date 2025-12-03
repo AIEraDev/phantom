@@ -1,5 +1,6 @@
 import { Queue, Worker, Job, QueueEvents } from "bullmq";
-import { dockerService, ExecutionResult } from "./docker.service";
+import { executionService, ExecutionResult } from "./index";
+import { dockerService } from "./docker.service";
 
 export interface ExecutionJob {
   id: string;
@@ -56,21 +57,24 @@ export const executionWorker = new Worker<ExecutionJob, ExecutionJobResult>(
       // Update job progress
       await job.updateProgress(10);
 
-      // Check if Docker is available
-      const dockerHealthy = await dockerService.healthCheck();
-      if (!dockerHealthy) {
-        throw new Error("Docker is not available");
+      // Check if execution service is available
+      const serviceHealthy = await executionService.healthCheck();
+      if (!serviceHealthy) {
+        throw new Error("Execution service is not available");
       }
 
       await job.updateProgress(20);
 
-      // Pull image if needed (this will be fast if already pulled)
-      await dockerService.pullImage(language);
+      // Pull Docker image if using Docker backend (this will be fast if already pulled)
+      // For Judge0 backend, this is a no-op but we keep it for Docker fallback compatibility
+      if (dockerService.healthCheck()) {
+        await dockerService.pullImage(language);
+      }
 
       await job.updateProgress(40);
 
-      // Execute code
-      const result = await dockerService.executeCode({
+      // Execute code using the configured execution service (Docker or Judge0)
+      const result = await executionService.executeCode({
         language,
         code,
         testInput,

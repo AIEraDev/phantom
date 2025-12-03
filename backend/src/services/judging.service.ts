@@ -1,4 +1,4 @@
-import { dockerService } from "../execution/docker.service";
+import { executionService } from "../execution";
 import { TestCase } from "../db/types";
 import { analyzeCodeQuality } from "./gemini.service";
 
@@ -41,7 +41,7 @@ export async function calculateCorrectnessScore(code: string, language: "javascr
       console.log(`[CorrectnessScore] Test ${i + 1}: Executing...`);
 
       // Execute code with test input
-      const result = await dockerService.executeCode({
+      const result = await executionService.executeCode({
         language,
         code,
         testInput,

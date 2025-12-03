@@ -90,6 +90,32 @@ Backend (`backend/.env`) and frontend (`frontend/.env.local`) are auto-created f
 
 **Optional:** Add `GEMINI_API_KEY` to `backend/.env` for AI features. Get one free at https://aistudio.google.com/apikey
 
+### Code Execution Backends
+
+Phantom supports two code execution backends for running user-submitted code:
+
+| Backend              | Best For    | Requirements           | How It Works                                 |
+| -------------------- | ----------- | ---------------------- | -------------------------------------------- |
+| **Docker** (Default) | Development | Docker Desktop running | Runs code in isolated containers locally     |
+| **Judge0**           | Production  | API key from RapidAPI  | Uses Judge0 Cloud API for scalable execution |
+
+**Development (Docker):**
+
+- Code runs in isolated Docker containers on your machine
+- No external API keys needed
+- Full control over execution environment
+- Set `EXECUTION_BACKEND=docker` (default)
+
+**Production (Judge0):**
+
+- Code runs on Judge0 Cloud infrastructure
+- No Docker needed in production
+- Automatic scaling and security sandboxing
+- Set `EXECUTION_BACKEND=judge0` and add `JUDGE0_API_KEY`
+- Get free API key: https://rapidapi.com/judge0-official/api/judge0-ce
+
+The system automatically falls back to Docker if Judge0 is unavailable or misconfigured
+
 ### Commands
 
 ```bash
