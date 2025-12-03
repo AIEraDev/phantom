@@ -565,6 +565,75 @@ export class Judge0Service {
   }
 
   /**
+   * Wrap user code to read input from stdin instead of file
+   * This ensures compatibility between Docker (file-based) and Judge0 (stdin-based) execution
+   */
+  private wrapCodeForStdin(code: string, language: string): string {
+    // Check if code already reads from stdin or doesn't need wrapping
+    if (!code.includes("/tmp/input.json") && !code.includes("input.json")) {
+      return code;
+    }
+
+    if (language === "javascript" || language === "typescript") {
+      // Replace file read with stdin read for JavaScript/TypeScript
+      // The wrapper reads all stdin, writes to virtual file path, then runs original code
+      const wrappedCode = `
+// Judge0 stdin wrapper - reads input from stdin instead of file
+const fs = require('fs');
+const originalReadFileSync = fs.readFileSync;
+let stdinData = '';
+
+// Read all stdin synchronously
+const buffer = Buffer.alloc(1024);
+let bytesRead;
+try {
+  while ((bytesRead = fs.readSync(0, buffer, 0, buffer.length, null)) > 0) {
+    stdinData += buffer.toString('utf8', 0, bytesRead);
+  }
+} catch (e) {
+  // End of stdin
+}
+
+// Mock fs.readFileSync to return stdin data for input.json
+fs.readFileSync = function(path, encoding) {
+  if (path === '/tmp/input.json' || path.endsWith('input.json')) {
+    return stdinData.trim();
+  }
+  return originalReadFileSync.call(fs, path, encoding);
+};
+
+// Original user code below
+${code}
+`;
+      return wrappedCode;
+    } else if (language === "python") {
+      // Replace file read with stdin read for Python
+      const wrappedCode = `
+# Judge0 stdin wrapper - reads input from stdin instead of file
+import sys
+import json
+import builtins
+
+_stdin_data = sys.stdin.read()
+
+_original_open = builtins.open
+def _mock_open(file, *args, **kwargs):
+    if file == '/tmp/input.json' or str(file).endswith('input.json'):
+        import io
+        return io.StringIO(_stdin_data)
+    return _original_open(file, *args, **kwargs)
+builtins.open = _mock_open
+
+# Original user code below
+${code}
+`;
+      return wrappedCode;
+    }
+
+    return code;
+  }
+
+  /**
    * Execute code through Judge0 Cloud API
    * Maintains backward compatibility with ExecutionConfig interface
    *
@@ -581,9 +650,12 @@ export class Judge0Service {
       // Step 1: Validate language is supported (throws if not)
       const languageId = this.mapLanguageToId(language);
 
-      // Step 2: Build submission and submit code to get token
+      // Step 2: Wrap code to read from stdin instead of file (for Judge0 compatibility)
+      const wrappedCode = this.wrapCodeForStdin(code, language);
+
+      // Step 3: Build submission and submit code to get token
       const submission: Judge0Submission = {
-        source_code: code,
+        source_code: wrappedCode,
         language_id: languageId,
         stdin: testInput,
         cpu_time_limit: timeout ? Math.ceil(timeout / 1000) : this.config.cpuTimeLimit,
@@ -592,10 +664,10 @@ export class Judge0Service {
 
       const token = await this.submitCode(submission);
 
-      // Step 3: Poll for result
+      // Step 4: Poll for result
       const response = await this.pollResult(token);
 
-      // Step 4: Map response to ExecutionResult
+      // Step 5: Map response to ExecutionResult
       return this.mapResponseToResult(response);
     } catch (error) {
       // Handle Judge0 API errors
