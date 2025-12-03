@@ -1,70 +1,106 @@
 # Phantom - Real-time Code Battle Platform
 
-A competitive multiplayer coding platform where developers battle head-to-head in algorithmic challenges.
+A competitive multiplayer coding platform where developers battle head-to-head in algorithmic challenges. Built for the Kiroween Hackathon 2025.
 
-## Tech Stack
-
-**Backend:** Node.js, Express, TypeScript, Socket.io, PostgreSQL, Redis, Docker  
-**Frontend:** Next.js 14, React 18, TypeScript, TailwindCSS, Monaco Editor
-
-## Quick Start
+## 🎮 Quick Demo (For Judges)
 
 ### Prerequisites
 
 - Node.js 18+
 - pnpm (`npm install -g pnpm`)
-- Docker Desktop (running)
+- Docker Desktop (must be running)
 
-### Start Development
+### Setup & Run (< 2 minutes)
 
 ```bash
+# 1. Install dependencies
 pnpm install
-pnpm setup          # Start Docker containers + run migrations
-```
 
-Then open two terminals:
+# 2. Start Docker containers + seed database
+pnpm setup
 
-```bash
-# Terminal 1 - Backend
+# 3. Start backend (Terminal 1)
 pnpm dev:backend
-```
 
-```bash
-# Terminal 2 - Frontend
+# 4. Start frontend (Terminal 2)
 pnpm dev:frontend
 ```
 
-- Backend: http://localhost:3001
-- Frontend: http://localhost:3000
+### Test Accounts
 
-### Stop Development
+| Email            | Password         | Username |
+| ---------------- | ---------------- | -------- |
+| player1@test.com | player1@test.com | Player_1 |
+| player2@test.com | player2@test.com | Player_2 |
 
-Press `Ctrl+C` in each terminal, then:
+### Try It Out
 
-```bash
-pnpm stop           # Stop Docker containers
-```
+1. Open http://localhost:3000
+2. Login with `player1@test.com` in one browser
+3. Login with `player2@test.com` in another browser (or incognito)
+4. Both players click "Find Match" to battle each other!
 
-## Project Structure
+---
+
+## 🚀 Features
+
+- **Real-time 1v1 Code Battles** - Compete head-to-head with live opponent progress
+- **AI Code Coach** - Get hints and guidance powered by Gemini AI
+- **Power-ups System** - Use strategic power-ups for competitive advantage
+- **Phantom Mode** - Stealth coding to hide your progress from opponents
+- **Ghost Race** - Race against recordings of top players
+- **Skill Tree** - Track and develop your coding abilities
+- **Leaderboard** - Global rankings with ELO-based rating system
+
+## 🛠 Tech Stack
+
+| Layer          | Technologies                                                 |
+| -------------- | ------------------------------------------------------------ |
+| Frontend       | Next.js 14, React 18, TypeScript, TailwindCSS, Monaco Editor |
+| Backend        | Node.js, Express, TypeScript, Socket.io                      |
+| Database       | PostgreSQL, Redis                                            |
+| AI             | Google Gemini API                                            |
+| Infrastructure | Docker, Railway                                              |
+
+## 📁 Project Structure
 
 ```
 phantom/
-├── backend/          # Express.js API
-│   ├── src/
-│   └── nodemon.json
-├── frontend/         # Next.js App
-│   └── src/app/
-├── scripts/          # Dev scripts
-└── docker-compose.yml
+├── .kiro/              # Kiro specs, steering docs, vibe coding
+│   ├── specs/          # Feature specifications
+│   ├── steering/       # Project guidelines
+│   └── vibe-coding/    # Development session logs
+├── backend/            # Express.js API + WebSocket server
+│   └── src/
+│       ├── db/         # Database migrations & seeds
+│       ├── services/   # Business logic
+│       ├── routes/     # REST API endpoints
+│       └── websocket/  # Real-time handlers
+├── frontend/           # Next.js application
+│   └── src/app/        # App router pages
+├── scripts/            # Development utilities
+└── docker-compose.yml  # Local PostgreSQL & Redis
 ```
 
-## Environment Variables
+## 🔧 Development
 
-Backend uses `.env` and frontend uses `.env.local` - both are auto-created from examples on first run.
+### Environment Variables
 
-Optional: Add your `GEMINI_API_KEY` to `backend/.env` for AI judging features. Get one free at https://aistudio.google.com/apikey
+Backend (`backend/.env`) and frontend (`frontend/.env.local`) are auto-created from examples on first run.
 
-## Troubleshooting
+**Optional:** Add `GEMINI_API_KEY` to `backend/.env` for AI features. Get one free at https://aistudio.google.com/apikey
+
+### Commands
+
+```bash
+pnpm install        # Install all dependencies
+pnpm setup          # Start Docker + run migrations + seed
+pnpm dev:backend    # Start backend server (port 3001)
+pnpm dev:frontend   # Start frontend server (port 3000)
+pnpm stop           # Stop Docker containers
+```
+
+### Troubleshooting
 
 **Port in use:**
 
@@ -77,17 +113,9 @@ lsof -ti:3000 | xargs kill -9  # Frontend
 
 ```bash
 docker-compose down -v
-pnpm dev
+pnpm setup
 ```
 
-**Check services:**
+## 📜 License
 
-```bash
-docker ps                           # Containers
-curl http://localhost:3001/health   # Backend
-curl http://localhost:3000          # Frontend
-```
-
-## License
-
-MIT
+MIT - See [LICENSE](LICENSE) file

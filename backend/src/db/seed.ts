@@ -1,5 +1,8 @@
+import bcrypt from "bcrypt";
 import pool from "./connection";
 import { challenges as challengesData } from "./challenges-data";
+
+const SALT_ROUNDS = 10;
 
 async function seedDatabase() {
   try {
@@ -12,6 +15,23 @@ async function seedDatabase() {
        ON CONFLICT (id) DO NOTHING`
     );
     console.log("✓ AI Ghost system user created (or already exists)");
+
+    // Create test players for demo/judging
+    const testPlayers = [
+      { email: "player1@test.com", password: "player1@test.com", username: "Player1" },
+      { email: "player2@test.com", password: "player2@test.com", username: "Player2" },
+    ];
+
+    for (const player of testPlayers) {
+      const passwordHash = await bcrypt.hash(player.password, SALT_ROUNDS);
+      await pool.query(
+        `INSERT INTO users (username, email, password_hash, rating, wins, losses, total_matches, created_at)
+         VALUES ($1, $2, $3, 1000, 0, 0, 0, NOW())
+         ON CONFLICT (email) DO NOTHING`,
+        [player.username, player.email, passwordHash]
+      );
+      console.log(`✓ Test player created: ${player.username} (${player.email})`);
+    }
 
     // Check if challenges already exist
     const existingChallenges = await pool.query("SELECT COUNT(*) FROM challenges");
