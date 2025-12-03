@@ -115,7 +115,9 @@ export const toastManager = {
 
   subscribe: (listener: (toasts: Toast[]) => void) => {
     toastListeners.add(listener);
-    return () => toastListeners.delete(listener);
+    return () => {
+      toastListeners.delete(listener);
+    };
   },
 };
 

@@ -81,7 +81,7 @@ matchmakingProcessor.setIO(io);
 // Export io and eventEmitter for use in other modules
 export { io, eventEmitter };
 
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || "3001", 10);
 
 httpServer.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on 0.0.0.0:${PORT}`);

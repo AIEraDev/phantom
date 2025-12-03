@@ -70,7 +70,7 @@ export default function CodeEditor({ language, initialCode, onChange, readOnly =
         // Improve performance on mobile
         renderWhitespace: isMobile ? "none" : "selection",
         renderLineHighlight: isMobile ? "none" : "all",
-        occurrencesHighlight: !isMobile,
+        occurrencesHighlight: isMobile ? "off" : "singleFile",
         selectionHighlight: !isMobile,
       });
     },

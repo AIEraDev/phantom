@@ -6,7 +6,7 @@
  */
 
 import { ratingService } from "./rating.service";
-import { pool } from "../db/connection";
+import pool from "../db/connection";
 
 /**
  * Example: Complete match and update player ratings

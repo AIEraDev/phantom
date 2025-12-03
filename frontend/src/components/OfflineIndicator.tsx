@@ -55,7 +55,7 @@ export function OfflineIndicator() {
 export function ConnectionStatusBadge() {
   const { connectionState, isConnected } = useWebSocket();
 
-  const statusConfig = {
+  const statusConfig: Record<ConnectionState, { color: string; text: string; pulse: boolean }> = {
     [ConnectionState.CONNECTED]: {
       color: "bg-accent-lime",
       text: "Connected",
@@ -74,6 +74,11 @@ export function ConnectionStatusBadge() {
     [ConnectionState.DISCONNECTED]: {
       color: "bg-accent-red",
       text: "Disconnected",
+      pulse: false,
+    },
+    [ConnectionState.ERROR]: {
+      color: "bg-accent-red",
+      text: "Error",
       pulse: false,
     },
   };

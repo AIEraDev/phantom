@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { visualizationService } from "../services/visualization.service";
+import { generateVisualization } from "../services/visualization.service";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { VisualizationDataType, TestCase } from "../db/types";
 
@@ -99,7 +99,7 @@ router.post("/generate", authenticateToken, async (req: Request, res: Response) 
     };
 
     // Generate visualization
-    const visualization = await visualizationService.generateVisualization(code, language as "javascript" | "python" | "typescript", validatedTestCase, dataType as VisualizationDataType);
+    const visualization = generateVisualization(validatedTestCase.input, validatedTestCase.expectedOutput);
 
     res.json({ visualization });
   } catch (error: any) {
