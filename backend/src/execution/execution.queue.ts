@@ -67,7 +67,7 @@ export const executionWorker = new Worker<ExecutionJob, ExecutionJobResult>(
 
       // Pull Docker image if using Docker backend (this will be fast if already pulled)
       // For Judge0 backend, this is a no-op but we keep it for Docker fallback compatibility
-      if (dockerService.healthCheck()) {
+      if (await dockerService.healthCheck()) {
         await dockerService.pullImage(language);
       }
 
