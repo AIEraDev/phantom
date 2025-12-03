@@ -239,17 +239,17 @@ export function setupGhostRaceHandlers(io: Server<ClientToServerEvents, ServerTo
       }
 
       // Execute code against visible test cases
-      const { dockerService } = await import("../execution/docker.service");
+      const { executionService } = await import("../execution");
       const visibleTestCases = challenge.test_cases.filter((tc) => !tc.isHidden);
       const results = [];
 
       for (const testCase of visibleTestCases) {
         try {
-          const result = await dockerService.executeCode({
+          const result = await executionService.executeCode({
             language: "javascript",
             code,
             testInput: JSON.stringify(testCase.input),
-            timeout: 2000,
+            timeout: 10000, // Increased timeout for Judge0 API
           });
 
           let passed = false;

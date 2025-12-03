@@ -179,7 +179,7 @@ export function setupBattleArenaHandlers(io: Server<ClientToServerEvents, Server
       const visibleTestCases = challenge.test_cases.filter((tc) => !tc.isHidden);
 
       // Execute code against each visible test case with a global timeout
-      const { dockerService } = await import("../execution/docker.service");
+      const { executionService } = await import("../execution");
       const results: any[] = [];
 
       // Global timeout for all test cases (30 seconds max)
@@ -194,7 +194,7 @@ export function setupBattleArenaHandlers(io: Server<ClientToServerEvents, Server
             const testInput = JSON.stringify(testCase.input);
             console.log(`[RunCode] Executing test with input: ${testInput}`);
 
-            const result = await dockerService.executeCode({
+            const result = await executionService.executeCode({
               language: language as "javascript" | "python" | "typescript",
               code,
               testInput,
