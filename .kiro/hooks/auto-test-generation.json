@@ -1,0 +1,13 @@
+{
+  "name": "Auto Test Generation",
+  "description": "Automatically generates or updates tests when a source file is saved",
+  "trigger": {
+    "type": "onFileSave",
+    "pattern": "**/*.ts",
+    "exclude": ["**/*.test.ts", "**/*.spec.ts", "**/node_modules/**"]
+  },
+  "action": {
+    "type": "sendMessage",
+    "message": "The file {{filePath}} was just saved. Please analyze this file and:\n\n1. Check if a corresponding test file exists (*.test.ts)\n2. If no test file exists, create one with basic unit tests\n3. If a test file exists, check if new functions/methods need tests\n4. Focus on testing the main exported functions\n5. Use vitest as the testing framework\n6. Keep tests minimal and focused on core functionality\n\nOnly generate tests for functions that don't already have test coverage."
+  }
+}
